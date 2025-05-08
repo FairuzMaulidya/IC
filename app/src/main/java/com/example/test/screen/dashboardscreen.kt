@@ -1,4 +1,3 @@
-// DashboardScreen.kt
 package com.example.test.screen
 
 import androidx.compose.foundation.background
@@ -14,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
@@ -49,6 +49,7 @@ fun DashboardMainScreen() {
 
     val title = when (currentRoute) {
         "data_entry" -> "Data Entry"
+        "train_model" -> "Train Model"
         else -> "Dashboard"
     }
 
@@ -86,7 +87,7 @@ fun Sidebar(navController: NavHostController) {
             Icon(Icons.Default.Person, contentDescription = "Admin", tint = Color.White)
             Spacer(modifier = Modifier.width(8.dp))
             Column {
-                Text("Admin", color = Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("Admin", color = Color.White, fontWeight = FontWeight.Bold)
                 Text("Edit Profile", color = Color.White, fontSize = 12.sp)
             }
         }
@@ -102,6 +103,13 @@ fun Sidebar(navController: NavHostController) {
 
         DrawerItem(icon = Icons.Default.Edit, label = "Data Entry") {
             navController.navigate("data_entry") {
+                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+
+        DrawerItem(icon = Icons.Default.AutoGraph, label = "Train Model") {
+            navController.navigate("train_model") {
                 popUpTo(navController.graph.startDestinationId) { inclusive = true }
                 launchSingleTop = true
             }
@@ -129,6 +137,7 @@ fun NavigationHost(navController: NavHostController) {
     NavHost(navController = navController, startDestination = "dashboard") {
         composable("dashboard") { DashboardContent() }
         composable("data_entry") { DataEntryScreen(navController) }
+        composable("train_model") { TrainModelScreen() } // pastikan import tersedia
     }
 }
 
