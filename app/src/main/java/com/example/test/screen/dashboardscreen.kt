@@ -27,6 +27,7 @@ import com.example.test.R
 import com.example.test.screens.ProfileScreen
 import com.example.test.viewmodel.ProfileViewModel
 import kotlinx.coroutines.launch
+import com.example.test.screen.ContentScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +64,7 @@ fun DashboardMainScreen() {
         "data_entry" -> "Data Entry"
         "train_model" -> "Train Model"
         "profile" -> "Edit Profil"
+        "data_api" -> "Data API"
         else -> "Dashboard"
     }
 
@@ -139,7 +141,15 @@ fun Sidebar(navController: NavHostController) {
                 launchSingleTop = true
             }
         }
+
+        DrawerItem(icon = Icons.Default.CloudDownload, label = "API") {
+            navController.navigate("data_api") {
+                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
     }
+
 }
 
 
@@ -171,6 +181,7 @@ fun NavigationHost(navController: NavHostController) {
         composable("profile") { backStackEntry ->
             ProfileScreen(navController)
         }
+        composable("data_api") { ContentScreen() }
     }
 }
 
