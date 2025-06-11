@@ -1,200 +1,385 @@
 package com.example.test.screen
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavHostController
+import com.example.test.data.ModelTraining
+import com.example.test.data.Project
+import com.example.test.viewmodel.ModelTrainingViewModel
+import com.example.test.viewmodel.ProjectViewModel
+import java.text.SimpleDateFormat
+import java.util.*
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.tooling.preview.Preview // Keep this import for preview functionality
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun TrainModelScreen() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "Train Model",
-            fontSize = 20.sp,
-            color = Color(0xFFE58DD6),
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+fun TrainModelScreen(
+    navController: NavHostController // This parameter is here but not used in the provided logic for navigation
+) {
+    val modelTrainingViewModel: ModelTrainingViewModel = viewModel()
+    val projectViewModel: ProjectViewModel = viewModel()
 
-        StatusModelSection()
-        Spacer(modifier = Modifier.height(16.dp))
-        ModelPerformanceTable()
-    }
-}
+    val trainings by modelTrainingViewModel.modelTrainings.collectAsState(initial = emptyList()) // Ensure initial value for flow
+    val projects by projectViewModel.allProjects.observeAsState(initial = emptyList())
 
-@Composable
-fun StatusModelSection() {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFFB3)),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Status Model", color = Color.Black, fontSize = 18.sp)
-            Spacer(modifier = Modifier.height(12.dp))
+    var showForm by remember { mutableStateOf(false) }
+    var editingTraining by remember { mutableStateOf<ModelTraining?>(null) }
+    var viewingTraining by remember { mutableStateOf<ModelTraining?>(null) }
 
-            // Horizontal Bar Chart
-            Row(
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)) {
+
+        Text("Daftar Pelatihan Model", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+
+        Spacer(modifier = Modifier.height(8.dp)) // Space after title
+
+        Button(
+            onClick = {
+                editingTraining = null
+                showForm = true
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF28a745)), // Green color from screenshot
+            modifier = Modifier.padding(vertical = 8.dp)
+        ) {
+            Text("Model Training Baru", color = Color.White)
+        }
+
+        // --- Start of the corrected section for showing the form ---
+        if (showForm) {
+            ModelTrainingForm(
+                projects = projects,
+                initialTraining = editingTraining,
+                onSave = {
+                    if (editingTraining != null) {
+                        modelTrainingViewModel.updateTraining(it)
+                    } else {
+                        modelTrainingViewModel.addTraining(it)
+                    }
+                    showForm = false
+                    editingTraining = null
+                },
+                onCancel = {
+                    showForm = false
+                    editingTraining = null
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 32.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Group 1: Prediksi Harga Rumah
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    .weight(1f) // Crucial: Allows the form to take available space and scroll internally
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+        // --- End of the corrected section ---
+
+
+        if (!showForm) {
+            Text("Pelatihan Model Tersedia:", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+
+            Spacer(modifier = Modifier.height(8.dp)) // Space before table
+
+            if (trainings.isNotEmpty()) {
+                // Shared horizontal scroll state for header and rows
+                val sharedHorizontalScrollState = rememberScrollState()
+
+                // Table Header
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA)) // Light grey background
+                ) {
                     Row(
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(sharedHorizontalScrollState) // Apply shared scroll state here
+                            .padding(horizontal = 8.dp, vertical = 12.dp)
                     ) {
-                        ModelBar("Decision Tree", 90, Color(0xFFFFA726))
-                        ModelBar("Regresi Linear", null, Color(0xFFFFA726))
+                        // Weights adjusted to roughly match screenshot, might need fine-tuning
+                        Text("#", fontWeight = FontWeight.Bold, modifier = Modifier.width(30.dp))
+                        Text("Proyek", fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
+                        Text("Nama Model", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
+                        Text("Tipe Model", fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
+                        Text("Algoritma", fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
+                        Text("Hyperparameter", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
+                        Text("Data Latih", fontWeight = FontWeight.Bold, modifier = Modifier.width(90.dp))
+                        Text("Metrik Evaluasi", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
+                        Text("Performa Model", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
+                        Text("Dilatih Oleh", fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
+                        Text("Tanggal Pelatihan", fontWeight = FontWeight.Bold, modifier = Modifier.width(130.dp))
+                        Text("Path Model Tersimpan", fontWeight = FontWeight.Bold, modifier = Modifier.width(160.dp))
+                        Text("Tanggal Dibuat", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
+                        Text("Terakhir Update", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
+                        Text("Aksi", fontWeight = FontWeight.Bold, modifier = Modifier.width(200.dp), textAlign = TextAlign.End) // Wider for 3 buttons
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Prediksi Harga\nRumah",
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.Center
-                    )
                 }
 
-                // Spacer antar group
-                Spacer(modifier = Modifier.width(32.dp))
+                // Table Content (LazyColumn for rows)
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f) // Makes LazyColumn take remaining height
+                ) {
+                    items(
+                        items = trainings,
+                        key = { training -> training.id }
+                    ) { item ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp) // Smaller padding between rows
+                                .clipToBounds(), // Clip content if it tries to overflow
+                            elevation = CardDefaults.cardElevation(1.dp), // Less prominent elevation
+                            colors = CardDefaults.cardColors(containerColor = Color.White)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(sharedHorizontalScrollState) // Apply shared scroll state here too
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+                                // Data cells - match header widths
+                                Text("${trainings.indexOf(item) + 1}", modifier = Modifier.width(30.dp)) // # column
+                                Text(item.projectName, modifier = Modifier.width(100.dp))
+                                Text(item.modelName, modifier = Modifier.width(120.dp))
+                                Text(item.modelType, modifier = Modifier.width(100.dp))
+                                Text(item.algorithm, modifier = Modifier.width(100.dp))
+                                Text(item.hyperparameters, modifier = Modifier.width(120.dp))
+                                Text(item.trainingData, modifier = Modifier.width(90.dp))
+                                Text(item.evaluationMetric, modifier = Modifier.width(120.dp))
+                                Text(item.performance, modifier = Modifier.width(120.dp))
+                                Text(item.trainedBy, modifier = Modifier.width(100.dp))
+                                Text(item.trainingDate, modifier = Modifier.width(130.dp))
+                                Text(item.modelPath, modifier = Modifier.width(160.dp))
+                                Text(item.createdDate, modifier = Modifier.width(120.dp)) // Tanggal Dibuat
+                                Text(item.lastUpdated, modifier = Modifier.width(120.dp)) // Terakhir Update
 
-                // Group 2: Deteksi Hewan
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        ModelBar("CNN", 86, Color(0xFFE57373))
-                        ModelBar("YOLO", 70, Color(0xFFE57373))
+                                Row(
+                                    modifier = Modifier.width(200.dp), // Actions column width
+                                    horizontalArrangement = Arrangement.End // Align buttons to the end
+                                ) {
+                                    Button(
+                                        onClick = { viewingTraining = item },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6c757d)), // Grey
+                                        modifier = Modifier.width(60.dp).height(30.dp) // Smaller button
+                                    ) {
+                                        Text("View", fontSize = 10.sp, color = Color.White)
+                                    }
+                                    Spacer(Modifier.width(4.dp))
+                                    Button(
+                                        onClick = {
+                                            editingTraining = item
+                                            showForm = true
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007bff)), // Blue
+                                        modifier = Modifier.width(60.dp).height(30.dp)
+                                    ) {
+                                        Text("Edit", fontSize = 10.sp, color = Color.White)
+                                    }
+                                    Spacer(Modifier.width(4.dp))
+                                    Button(
+                                        onClick = { modelTrainingViewModel.deleteTraining(item) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFdc3545)), // Red
+                                        modifier = Modifier.width(60.dp).height(30.dp)
+                                    ) {
+                                        Text("Hapus", fontSize = 10.sp, color = Color.White)
+                                    }
+                                }
+                            }
+                        }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Deteksi Hewan",
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.Center
-                    )
                 }
+            } else {
+                Text(
+                    "Belum ada pelatihan model.",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    textAlign = TextAlign.Center,
+                    color = Color.Gray
+                )
+            }
+
+
+            // View Dialog (unchanged)
+            if (viewingTraining != null) {
+                AlertDialog(
+                    onDismissRequest = { viewingTraining = null },
+                    title = { Text("Detail Model") },
+                    text = {
+                        Column {
+                            Text("Nama Model: ${viewingTraining!!.modelName}")
+                            Text("Tipe: ${viewingTraining!!.modelType}")
+                            Text("Algoritma: ${viewingTraining!!.algorithm}")
+                            Text("Performa: ${viewingTraining!!.performance}")
+                            Text("Data Latih: ${viewingTraining!!.trainingData}")
+                            Text("Metrik Evaluasi: ${viewingTraining!!.evaluationMetric}")
+                            Text("Trained By: ${viewingTraining!!.trainedBy}")
+                            Text("Path: ${viewingTraining!!.modelPath}")
+                            Text("Tanggal Pelatihan: ${viewingTraining!!.trainingDate}")
+                            Text("Tanggal Dibuat: ${viewingTraining!!.createdDate}") // Display createdDate
+                            Text("Terakhir Update: ${viewingTraining!!.lastUpdated}") // Display lastUpdated
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { viewingTraining = null }) {
+                            Text("Tutup")
+                        }
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-fun ModelBar(modelName: String, accuracy: Int?, barColor: Color) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Bottom,
-        modifier = Modifier
-            .height(130.dp)
-            .width(60.dp)
-    ) {
-        if (accuracy != null) {
-            Text(
-                "$accuracy%",
-                fontSize = 12.sp,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-            Box(
-                modifier = Modifier
-                    .height((accuracy).dp)
-                    .width(30.dp)
-                    .background(barColor)
-            )
-        } else {
-            Text(
-                "on-going",
-                fontSize = 10.sp,
-                color = Color.DarkGray,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-            Box(
-                modifier = Modifier
-                    .height(8.dp)
-                    .width(30.dp)
-                    .background(barColor, shape = MaterialTheme.shapes.small)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            modelName,
-            fontSize = 10.sp,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-@Composable
-fun ModelPerformanceTable() {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFBBDEFB)),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-                .horizontalScroll(rememberScrollState())
-        ) {
-            Row(modifier = Modifier.padding(bottom = 8.dp)) {
-                Text("#", modifier = Modifier.width(30.dp))
-                Text("Problem", modifier = Modifier.width(150.dp))
-                Text("Model Cerdas", modifier = Modifier.width(120.dp))
-                Text("Akurasi", modifier = Modifier.width(80.dp))
-                Text("Status", modifier = Modifier.width(100.dp))
-                Text("Actions", modifier = Modifier.width(160.dp))
-            }
-            Divider(color = Color.Gray)
-            TableRow("01", "Prediksi Harga Rumah", "Regresi Linear", "-", "On-going", Color(0xFFFFA726))
-            TableRow("02", "Deteksi Hewan", "CNN", "86%", "Success", Color(0xFF81C784))
-        }
-    }
-}
-
-@Composable
-fun TableRow(
-    index: String,
-    problem: String,
-    model: String,
-    accuracy: String,
-    status: String,
-    statusColor: Color
+fun ModelTrainingForm(
+    projects: List<Project>,
+    initialTraining: ModelTraining? = null,
+    onSave: (ModelTraining) -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier // Add a modifier parameter
 ) {
-    Row(
-        modifier = Modifier.padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    // Corrected date format from "dd MMMADIUM" to "dd MMM yyyy" or "dd MMM yyyy HH:mm:ss"
+    // Using "dd MMM yyyy" to match common date display without time.
+    val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    val today = dateFormat.format(Date())
+
+    var projectName by rememberSaveable { mutableStateOf(initialTraining?.projectName ?: "") }
+    var modelName by rememberSaveable { mutableStateOf(initialTraining?.modelName ?: "") }
+    var modelType by rememberSaveable { mutableStateOf(initialTraining?.modelType ?: "") }
+    var algorithm by rememberSaveable { mutableStateOf(initialTraining?.algorithm ?: "") }
+    var hyperparameters by rememberSaveable { mutableStateOf(initialTraining?.hyperparameters ?: "") }
+    var trainingData by rememberSaveable { mutableStateOf(initialTraining?.trainingData ?: "") }
+    var evaluationMetric by rememberSaveable { mutableStateOf(initialTraining?.evaluationMetric ?: "") }
+    var performance by rememberSaveable { mutableStateOf(initialTraining?.performance ?: "") }
+    var trainedBy by rememberSaveable { mutableStateOf(initialTraining?.trainedBy ?: "") }
+    var modelPath by rememberSaveable { mutableStateOf(initialTraining?.modelPath ?: "") }
+
+    Column(modifier = modifier // Use the passed modifier from TrainModelScreen
+        .fillMaxWidth()
+        .padding(8.dp)
+        .verticalScroll(rememberScrollState()) // The form itself uses verticalScroll for its content
     ) {
-        Text(index, modifier = Modifier.width(30.dp))
-        Text(problem, modifier = Modifier.width(150.dp))
-        Text(model, modifier = Modifier.width(120.dp))
-        Text(accuracy, modifier = Modifier.width(80.dp))
-        Text(status, color = statusColor, modifier = Modifier.width(100.dp))
-        Row(modifier = Modifier.width(160.dp)) {
-            Button(
-                onClick = { /* TODO: Edit logic */ },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB39DDB)),
-                modifier = Modifier.padding(end = 4.dp)
-            ) {
-                Text("Edit", fontSize = 12.sp)
+        ProjectDropdown("Pilih Proyek", projectName, projects.map { it.projectName }) {
+            projectName = it
+        }
+        CustomTextField("Nama Model", modelName) { modelName = it }
+        CustomTextField("Tipe Model", modelType) { modelType = it }
+        CustomTextField("Algoritma", algorithm) { algorithm = it }
+        CustomTextField("Hyperparameter", hyperparameters) { hyperparameters = it }
+        CustomTextField("Data Latih", trainingData) { trainingData = it }
+        CustomTextField("Metrik Evaluasi", evaluationMetric) { evaluationMetric = it }
+        CustomTextField("Performa Model", performance) { performance = it }
+        CustomTextField("Dilatih Oleh", trainedBy) { trainedBy = it }
+        CustomTextField("Path Model", modelPath) { modelPath = it }
+
+        Row(modifier = Modifier.padding(top = 8.dp)) {
+            Button(onClick = {
+                if (projectName.isNotBlank() && modelName.isNotBlank()) {
+                    onSave(
+                        ModelTraining(
+                            id = initialTraining?.id ?: 0,
+                            projectName, modelName, modelType, algorithm,
+                            hyperparameters, trainingData, evaluationMetric,
+                            performance, trainedBy,
+                            trainingDate = initialTraining?.trainingDate ?: today, // Keep original trainingDate if editing
+                            modelPath = modelPath,
+                            createdDate = initialTraining?.createdDate ?: today, // Keep original createdDate if editing
+                            lastUpdated = today // Always update lastUpdated to today
+                        )
+                    )
+                }
+            }) {
+                Text("Simpan")
             }
-            Button(
-                onClick = { /* TODO: Delete logic */ },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE57373))
-            ) {
-                Text("Delete", fontSize = 12.sp)
+            Spacer(modifier = Modifier.width(8.dp))
+            OutlinedButton(onClick = onCancel) {
+                Text("Batal")
             }
         }
     }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProjectDropdown(
+    label: String,
+    selected: String,
+    items: List<String>,
+    onSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = Modifier
+        .fillMaxWidth()
+        .padding(vertical = 4.dp)) {
+
+        OutlinedTextField(
+            value = selected,
+            onValueChange = { /* Read-only. Value is set via DropdownMenuItem click. */ },
+            label = { Text(label) },
+            readOnly = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = true },
+            trailingIcon = {
+                Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown Arrow")
+            }
+        )
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            items.forEach { item ->
+                DropdownMenuItem(
+                    text = { Text(item) },
+                    onClick = {
+                        onSelected(item)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CustomTextField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    )
 }

@@ -1,29 +1,34 @@
-
 import android.app.Application
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.test.data.AppDatabase
 import com.example.test.data.DataEntry
 import com.example.test.data.DataEntryRepository
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.Flow
+import com.example.test.data.ProjectRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class DataEntryViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = DataEntryRepository(AppDatabase.getDatabase(application).dataEntryDao())
+    private val projectRepository = ProjectRepository(AppDatabase.getDatabase(application).projectDao())
+
     val allEntries: StateFlow<List<DataEntry>> = repository.allEntries
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Gunakan LiveData langsung
+    val projectList = projectRepository.allProjectNames  // LiveData<List<String>>
 
     var selectedEntry = mutableStateOf<DataEntry?>(null)
 
     fun insertEntry(entry: DataEntry) = viewModelScope.launch {
-        // Simpan entry dan ambil ID yang dihasilkan
         val generatedId = repository.insert(entry)
-        // Update entry dengan ID yang dihasilkan
-        selectedEntry.value = entry.copy(id = generatedId.toInt())  // Pastikan untuk mengupdate state
+        selectedEntry.value = entry.copy(id = generatedId.toInt())
     }
 
     fun updateEntry(entry: DataEntry) = viewModelScope.launch {
@@ -37,8 +42,8 @@ class DataEntryViewModel(application: Application) : AndroidViewModel(applicatio
     fun setSelectedEntry(entry: DataEntry) {
         selectedEntry.value = entry
     }
-    suspend fun insertEntryAndGetId(entry: DataEntry): Long {
-        return repository.insert(entry) // repository panggil DAO.insert, dapatkan rowId
-    }
 
+    suspend fun insertEntryAndGetId(entry: DataEntry): Long {
+        return repository.insert(entry)
+    }
 }

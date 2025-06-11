@@ -6,14 +6,19 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [DataEntry::class, Profile::class], // Tambahkan Profile di sini
-    version = 2,
+    entities = [DataEntry::class, Profile::class,Project::class,DatasetRequest::class,
+        DataProcessing::class, ModelTraining::class],
+    version = 17,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun dataEntryDao(): DataEntryDao
-    abstract fun profileDao(): ProfileDao // Tambahkan DAO-nya
+    abstract fun profileDao(): ProfileDao
+    abstract fun projectDao(): ProjectDao
+    abstract fun reqDatasetDao(): ReqDatasetDao
+    abstract fun dataProcessingDao(): DataProcessingDao
+    abstract fun modelTrainingDao(): ModelTrainingDao
 
     companion object {
         @Volatile

@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -21,6 +22,11 @@ import com.example.test.util.UserDataStore
 
 @Composable
 fun LoginScreen(navController: NavHostController) {
+    val context = LocalContext.current
+    val storedEmail by UserDataStore.getEmail(context).collectAsState(initial = "")
+    val storedPassword by UserDataStore.getPassword(context).collectAsState(initial = "")
+    val storedUsername by UserDataStore.getUsername(context).collectAsState(initial = "")
+
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
@@ -28,9 +34,9 @@ fun LoginScreen(navController: NavHostController) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFFFF1F8)) // Background bawah putih
+            .background(Color(0xFFFFF1F8))
     ) {
-
+        // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -39,7 +45,7 @@ fun LoginScreen(navController: NavHostController) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Image(
-                painter = painterResource(id = R.drawable.logo), // Bisa diganti dengan ikon bulat pink jika berbeda
+                painter = painterResource(id = R.drawable.logo),
                 contentDescription = "Logo",
                 modifier = Modifier.size(28.dp)
             )
@@ -52,12 +58,12 @@ fun LoginScreen(navController: NavHostController) {
             )
         }
 
-        // Bagian atas - Header + Form
+        // Form
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .background(Color(0xFFFADAF1)) // Latar form pink muda
+                .background(Color(0xFFFADAF1))
                 .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.Center
         ) {
@@ -80,6 +86,7 @@ fun LoginScreen(navController: NavHostController) {
                 onValueChange = { password = it },
                 label = { Text("Password") },
                 modifier = Modifier.fillMaxWidth(),
+                visualTransformation = PasswordVisualTransformation(),
                 trailingIcon = {
                     Icon(Icons.Default.Visibility, contentDescription = "Toggle Password")
                 }
@@ -104,8 +111,8 @@ fun LoginScreen(navController: NavHostController) {
 
             Button(
                 onClick = {
-                    if (email == UserDataStore.email && password == UserDataStore.password) {
-                        navController.navigate("dashboard_main") {
+                    if (email == storedEmail && password == storedPassword) {
+                        navController.navigate("landing") {
                             popUpTo("login") { inclusive = true }
                         }
                     } else {
@@ -149,7 +156,7 @@ fun LoginScreen(navController: NavHostController) {
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Bagian bawah - Maskot
+        // Footer
         Box(
             modifier = Modifier
                 .fillMaxWidth()
