@@ -6,32 +6,39 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.example.test.R
-import com.example.test.util.UserDataStore
+import com.example.test.data.User // Import your User data class
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.test.viewmodel.UserViewModel
 import kotlinx.coroutines.launch
 
 @Composable
-fun SignUpScreen(navController: NavHostController) {
-    var email by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf("") }
+fun SignUpScreen(navController: NavHostController, userViewModel: UserViewModel = viewModel()) {
+    var email by rememberSaveable { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var errorMessage by rememberSaveable { mutableStateOf("") }
+    var passwordVisibility by rememberSaveable { mutableStateOf(false) }
+    var confirmPasswordVisibility by rememberSaveable { mutableStateOf(false) }
 
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+
+    val scope = rememberCoroutineScope() // Still needed for coroutine scope
 
     Box(
         modifier = Modifier
@@ -63,8 +70,7 @@ fun SignUpScreen(navController: NavHostController) {
 
             // Card: pink full-width box
             Card(
-                modifier = Modifier
-                    .fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFFFD9EC))
             ) {
@@ -82,7 +88,8 @@ fun SignUpScreen(navController: NavHostController) {
                         value = email,
                         onValueChange = { email = it },
                         label = { Text("Email Address") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -91,7 +98,8 @@ fun SignUpScreen(navController: NavHostController) {
                         value = username,
                         onValueChange = { username = it },
                         label = { Text("Username") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -100,13 +108,17 @@ fun SignUpScreen(navController: NavHostController) {
                         value = password,
                         onValueChange = { password = it },
                         label = { Text("Password") },
+                        visualTransformation = if (passwordVisibility) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.VisibilityOff,
-                                contentDescription = "Hide Password"
-                            )
+                            val image = if (passwordVisibility)
+                                Icons.Filled.Visibility
+                            else Icons.Filled.VisibilityOff
+                            IconButton(onClick = { passwordVisibility = !passwordVisibility }) {
+                                Icon(imageVector = image, contentDescription = "Toggle password visibility")
+                            }
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -115,13 +127,17 @@ fun SignUpScreen(navController: NavHostController) {
                         value = confirmPassword,
                         onValueChange = { confirmPassword = it },
                         label = { Text("Confirm Password") },
+                        visualTransformation = if (confirmPasswordVisibility) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.VisibilityOff,
-                                contentDescription = "Hide Password"
-                            )
+                            val image = if (confirmPasswordVisibility)
+                                Icons.Filled.Visibility
+                            else Icons.Filled.VisibilityOff
+                            IconButton(onClick = { confirmPasswordVisibility = !confirmPasswordVisibility }) {
+                                Icon(imageVector = image, contentDescription = "Toggle confirm password visibility")
+                            }
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -132,13 +148,22 @@ fun SignUpScreen(navController: NavHostController) {
                     ) {
                         Button(
                             onClick = {
-                                if (password == confirmPassword && email.isNotBlank() && username.isNotBlank()) {
-                                    scope.launch {
-                                        UserDataStore.saveUser(context, email, username, password)
-                                        errorMessage = "Account created. You can login now."
-                                    }
+                                if (email.isBlank() || username.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
+                                    errorMessage = "Please fill in all fields."
+                                } else if (password != confirmPassword) {
+                                    errorMessage = "Passwords do not match."
                                 } else {
-                                    errorMessage = "Password mismatch or fields empty."
+                                    // Using Room: Create a User object and save it via the ViewModel
+                                    val newUser = User(email = email, username = username, password = password)
+                                    scope.launch {
+                                        userViewModel.saveUser(newUser)
+                                        errorMessage = "Account created. You can login now."
+                                        // Optionally clear fields after successful registration
+                                        email = ""
+                                        username = ""
+                                        password = ""
+                                        confirmPassword = ""
+                                    }
                                 }
                             },
                             modifier = Modifier.weight(1f),

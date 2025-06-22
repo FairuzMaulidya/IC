@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DataEntryDao {
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(data: DataEntry): Long
 
     @Update
@@ -20,7 +20,8 @@ interface DataEntryDao {
     suspend fun delete(data: DataEntry)
 
     @Query("SELECT * FROM data_entry")
-    fun getAll(): Flow<List<DataEntry>>
+    fun getAll(): Flow<List<DataEntry>> // Mengembalikan Flow untuk semua entri
 
+    @Query("SELECT * FROM data_entry WHERE projectName = :projectName ORDER BY dateCreated DESC LIMIT 1")
+    suspend fun getProblemFramingByProjectName(projectName: String): DataEntry?
 }
-

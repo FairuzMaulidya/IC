@@ -5,12 +5,11 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "profile")
 data class Profile(
-    @PrimaryKey val username: String,
-    val name: String = "",
-    val dateOfBirth: String = "",
-    val country: String = "",
-    val region: String = "",
-    val mobile: String = "",
-    val photoUri: String? = null
+    @PrimaryKey val username: String, // This will be the username from signup
+    val firstName: String = "",
+    val lastName: String = "",
+    val emailAddress: String, // This will be the email from signup
+    val photoUri: String? = null, // URI to the profile photo
+    val bio: String = "",
+    val title: String = "" // Added 'title' field
 )
-

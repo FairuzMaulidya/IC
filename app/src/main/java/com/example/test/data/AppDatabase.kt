@@ -7,8 +7,8 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [DataEntry::class, Profile::class,Project::class,DatasetRequest::class,
-        DataProcessing::class, ModelTraining::class],
-    version = 17,
+        DataProcessing::class, ModelTraining::class, User::class,MeaningfulObjectives::class],
+    version = 51, // <-- NAIKKAN VERSI DATABASE! Penting untuk migrasi schema.
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -19,6 +19,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun reqDatasetDao(): ReqDatasetDao
     abstract fun dataProcessingDao(): DataProcessingDao
     abstract fun modelTrainingDao(): ModelTrainingDao
+    abstract fun userDao(): UserDao
+    abstract fun meaningfulObjectivesDao(): MeaningfulObjectivesDao
 
     companion object {
         @Volatile

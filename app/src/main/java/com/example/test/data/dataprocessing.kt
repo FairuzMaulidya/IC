@@ -10,13 +10,12 @@ import java.util.Locale
 data class DataProcessing(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
-    val projectName: String,
-    val sourceData: String,
-    val cleaningSteps: String,
-    val transformationSteps: String,
-    val featureEngineering: String,
-    val qualityMetrics: String,
-    val processedLocation: String, // GANTI dari dataLocation agar konsisten
-    val processedBy: String,
-    val createdAt: String = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()).format(Date())
+    val projectName: String, // Nama proyek yang terkait dengan pemrosesan data
+    val sourceData: String, // Sumber data asli yang digunakan (misal: "API", "CSV", "Database")
+    val transformationSteps: String, // Langkah-langkah detail tentang bagaimana data diubah/transformasi
+    val featureEngineering: String, // Detail tentang proses rekayasa fitur (pembuatan fitur baru dari data yang ada)
+    val processedFileLocation: String, // Lokasi tempat file data yang sudah diproses disimpan (misal: path folder lokal, URL cloud storage)
+    val processedFileName: String, // Nama file dari data yang telah diproses (untuk representasi "upload file")
+    val processingStatus: String, // Status pemrosesan data (misal: "Selesai", "Dalam Proses", "Gagal", "Menunggu")
+    val createdAt: String = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(Date()) // Waktu entri ini dibuat
 )

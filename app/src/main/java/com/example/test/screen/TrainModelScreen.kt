@@ -1,13 +1,17 @@
 package com.example.test.screen
 
+import android.app.DatePickerDialog
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.widget.DatePicker
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -26,27 +30,37 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.tooling.preview.Preview // Keep this import for preview functionality
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.foundation.shape.RoundedCornerShape // Added import for RoundedCornerShape
+import androidx.compose.ui.Alignment // Added import for Alignment
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TrainModelScreen(
-    navController: NavHostController // This parameter is here but not used in the provided logic for navigation
+    navController: NavHostController
 ) {
     val modelTrainingViewModel: ModelTrainingViewModel = viewModel()
     val projectViewModel: ProjectViewModel = viewModel()
 
-    val trainings by modelTrainingViewModel.modelTrainings.collectAsState(initial = emptyList()) // Ensure initial value for flow
-    val projects by projectViewModel.allProjects.observeAsState(initial = emptyList())
+    val trainings by modelTrainingViewModel.modelTrainings.collectAsState(initial = emptyList())
+    val localProjects by projectViewModel.allLocalProjects.observeAsState(emptyList())
+    val apiProjects by projectViewModel.apiProjects.observeAsState(emptyList())
+    val projectList = remember(localProjects, apiProjects) {
+        (localProjects + apiProjects).sortedBy { it.projectName }
+    }
 
     var showForm by remember { mutableStateOf(false) }
     var editingTraining by remember { mutableStateOf<ModelTraining?>(null) }
     var viewingTraining by remember { mutableStateOf<ModelTraining?>(null) }
+    var showDeleteConfirmationDialog by remember { mutableStateOf(false) } // State for dialog visibility
+    var trainingToDelete by remember { mutableStateOf<ModelTraining?>(null) } // State to hold item to delete
 
     Column(modifier = Modifier
         .fillMaxSize()
@@ -54,30 +68,30 @@ fun TrainModelScreen(
 
         Text("Daftar Pelatihan Model", fontSize = 24.sp, fontWeight = FontWeight.Bold)
 
-        Spacer(modifier = Modifier.height(8.dp)) // Space after title
+        Spacer(modifier = Modifier.height(8.dp))
 
         Button(
             onClick = {
                 editingTraining = null
                 showForm = true
             },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF28a745)), // Green color from screenshot
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF28a745)),
             modifier = Modifier.padding(vertical = 8.dp)
         ) {
-            Text("Model Training Baru", color = Color.White)
+            Text("Buat Model Training Baru", color = Color.White)
         }
 
-        // --- Start of the corrected section for showing the form ---
         if (showForm) {
-            ModelTrainingForm(
-                projects = projects,
-                initialTraining = editingTraining,
-                onSave = {
+            TrainModelForm(
+                allProjects = projectList,
+                initialData = editingTraining,
+                onSubmit = { submittedTraining ->
                     if (editingTraining != null) {
-                        modelTrainingViewModel.updateTraining(it)
+                        modelTrainingViewModel.updateTraining(submittedTraining)
                     } else {
-                        modelTrainingViewModel.addTraining(it)
+                        modelTrainingViewModel.addTraining(submittedTraining)
                     }
+                    viewingTraining = submittedTraining // Tampilkan detail setelah submit/update
                     showForm = false
                     editingTraining = null
                 },
@@ -87,59 +101,41 @@ fun TrainModelScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f) // Crucial: Allows the form to take available space and scroll internally
+                    .weight(1f)
             )
             Spacer(modifier = Modifier.height(16.dp))
         }
-        // --- End of the corrected section ---
-
 
         if (!showForm) {
-            Text("Pelatihan Model Tersedia:", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-
-            Spacer(modifier = Modifier.height(8.dp)) // Space before table
+            Spacer(modifier = Modifier.height(8.dp))
 
             if (trainings.isNotEmpty()) {
-                // Shared horizontal scroll state for header and rows
                 val sharedHorizontalScrollState = rememberScrollState()
 
-                // Table Header
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA)) // Light grey background
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA))
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(sharedHorizontalScrollState) // Apply shared scroll state here
+                            .horizontalScroll(sharedHorizontalScrollState)
                             .padding(horizontal = 8.dp, vertical = 12.dp)
                     ) {
-                        // Weights adjusted to roughly match screenshot, might need fine-tuning
-                        Text("#", fontWeight = FontWeight.Bold, modifier = Modifier.width(30.dp))
+                        Text("No", fontWeight = FontWeight.Bold, modifier = Modifier.width(30.dp))
                         Text("Proyek", fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
                         Text("Nama Model", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
-                        Text("Tipe Model", fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
-                        Text("Algoritma", fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
-                        Text("Hyperparameter", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
-                        Text("Data Latih", fontWeight = FontWeight.Bold, modifier = Modifier.width(90.dp))
-                        Text("Metrik Evaluasi", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
                         Text("Performa Model", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
-                        Text("Dilatih Oleh", fontWeight = FontWeight.Bold, modifier = Modifier.width(100.dp))
-                        Text("Tanggal Pelatihan", fontWeight = FontWeight.Bold, modifier = Modifier.width(130.dp))
-                        Text("Path Model Tersimpan", fontWeight = FontWeight.Bold, modifier = Modifier.width(160.dp))
-                        Text("Tanggal Dibuat", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
-                        Text("Terakhir Update", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
-                        Text("Aksi", fontWeight = FontWeight.Bold, modifier = Modifier.width(200.dp), textAlign = TextAlign.End) // Wider for 3 buttons
+                        Text("Aksi", fontWeight = FontWeight.Bold, modifier = Modifier.width(230.dp), textAlign = TextAlign.End)
                     }
                 }
 
-                // Table Content (LazyColumn for rows)
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f) // Makes LazyColumn take remaining height
+                        .weight(1f)
                 ) {
                     items(
                         items = trainings,
@@ -148,42 +144,33 @@ fun TrainModelScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 2.dp) // Smaller padding between rows
-                                .clipToBounds(), // Clip content if it tries to overflow
-                            elevation = CardDefaults.cardElevation(1.dp), // Less prominent elevation
+                                .padding(vertical = 2.dp)
+                                .clipToBounds(),
+                            elevation = CardDefaults.cardElevation(1.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White)
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .horizontalScroll(sharedHorizontalScrollState) // Apply shared scroll state here too
+                                    .horizontalScroll(sharedHorizontalScrollState)
                                     .padding(horizontal = 8.dp, vertical = 8.dp),
                                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                             ) {
-                                // Data cells - match header widths
-                                Text("${trainings.indexOf(item) + 1}", modifier = Modifier.width(30.dp)) // # column
+                                Text("${trainings.indexOf(item) + 1}", modifier = Modifier.width(30.dp))
                                 Text(item.projectName, modifier = Modifier.width(100.dp))
                                 Text(item.modelName, modifier = Modifier.width(120.dp))
-                                Text(item.modelType, modifier = Modifier.width(100.dp))
-                                Text(item.algorithm, modifier = Modifier.width(100.dp))
-                                Text(item.hyperparameters, modifier = Modifier.width(120.dp))
-                                Text(item.trainingData, modifier = Modifier.width(90.dp))
-                                Text(item.evaluationMetric, modifier = Modifier.width(120.dp))
                                 Text(item.performance, modifier = Modifier.width(120.dp))
-                                Text(item.trainedBy, modifier = Modifier.width(100.dp))
-                                Text(item.trainingDate, modifier = Modifier.width(130.dp))
-                                Text(item.modelPath, modifier = Modifier.width(160.dp))
-                                Text(item.createdDate, modifier = Modifier.width(120.dp)) // Tanggal Dibuat
-                                Text(item.lastUpdated, modifier = Modifier.width(120.dp)) // Terakhir Update
 
                                 Row(
-                                    modifier = Modifier.width(200.dp), // Actions column width
-                                    horizontalArrangement = Arrangement.End // Align buttons to the end
+                                    modifier = Modifier.width(230.dp),
+                                    horizontalArrangement = Arrangement.End
                                 ) {
                                     Button(
                                         onClick = { viewingTraining = item },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6c757d)), // Grey
-                                        modifier = Modifier.width(60.dp).height(30.dp) // Smaller button
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6c757d)),
+                                        modifier = Modifier
+                                            .width(70.dp)
+                                            .height(30.dp)
                                     ) {
                                         Text("View", fontSize = 10.sp, color = Color.White)
                                     }
@@ -193,18 +180,25 @@ fun TrainModelScreen(
                                             editingTraining = item
                                             showForm = true
                                         },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007bff)), // Blue
-                                        modifier = Modifier.width(60.dp).height(30.dp)
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007bff)),
+                                        modifier = Modifier
+                                            .width(70.dp)
+                                            .height(30.dp)
                                     ) {
                                         Text("Edit", fontSize = 10.sp, color = Color.White)
                                     }
                                     Spacer(Modifier.width(4.dp))
                                     Button(
-                                        onClick = { modelTrainingViewModel.deleteTraining(item) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFdc3545)), // Red
-                                        modifier = Modifier.width(60.dp).height(30.dp)
+                                        onClick = {
+                                            trainingToDelete = item // Set the item to be deleted
+                                            showDeleteConfirmationDialog = true // Show the dialog
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFdc3545)),
+                                        modifier = Modifier
+                                            .width(70.dp)
+                                            .height(30.dp)
                                     ) {
-                                        Text("Hapus", fontSize = 10.sp, color = Color.White)
+                                        Text("Delete", fontSize = 10.sp, color = Color.White)
                                     }
                                 }
                             }
@@ -221,165 +215,470 @@ fun TrainModelScreen(
                     color = Color.Gray
                 )
             }
+        }
 
+        // Tampilan Dialog untuk View (kini menampilkan semua field yang relevan dari DAO yang baru)
+        if (viewingTraining != null) {
+            Dialog(onDismissRequest = { viewingTraining = null }) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F0F0))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        // Judul: "Train Model: [Nama Proyek]"
+                        Text(
+                            "Detail Pelatihan Model: ${viewingTraining!!.projectName}",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
 
-            // View Dialog (unchanged)
-            if (viewingTraining != null) {
-                AlertDialog(
-                    onDismissRequest = { viewingTraining = null },
-                    title = { Text("Detail Model") },
-                    text = {
-                        Column {
-                            Text("Nama Model: ${viewingTraining!!.modelName}")
-                            Text("Tipe: ${viewingTraining!!.modelType}")
-                            Text("Algoritma: ${viewingTraining!!.algorithm}")
-                            Text("Performa: ${viewingTraining!!.performance}")
-                            Text("Data Latih: ${viewingTraining!!.trainingData}")
-                            Text("Metrik Evaluasi: ${viewingTraining!!.evaluationMetric}")
-                            Text("Trained By: ${viewingTraining!!.trainedBy}")
-                            Text("Path: ${viewingTraining!!.modelPath}")
-                            Text("Tanggal Pelatihan: ${viewingTraining!!.trainingDate}")
-                            Text("Tanggal Dibuat: ${viewingTraining!!.createdDate}") // Display createdDate
-                            Text("Terakhir Update: ${viewingTraining!!.lastUpdated}") // Display lastUpdated
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { viewingTraining = null }) {
-                            Text("Tutup")
+                        // Nama Model
+                        Text("Nama Model", style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = viewingTraining!!.modelName,
+                            onValueChange = { },
+                            readOnly = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+                        // Tipe Model
+                        Text("Tipe Model", style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = viewingTraining!!.modelType,
+                            onValueChange = { },
+                            readOnly = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+                        // Algoritma
+                        Text("Algoritma", style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = viewingTraining!!.algorithm,
+                            onValueChange = { },
+                            readOnly = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+                        // Data Latih
+                        Text("Data Pelatihan", style = MaterialTheme.typography.bodyLarge) // Disesuaikan dengan form
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = viewingTraining!!.trainingData,
+                            onValueChange = { },
+                            readOnly = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+                        // Performa Model
+                        Text("Performa Model", style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = viewingTraining!!.performance,
+                            onValueChange = { },
+                            readOnly = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+                        // File Model Terlatih (nama label disesuaikan)
+                        Text("File Model Terlatih", style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = viewingTraining!!.modelPath,
+                            onValueChange = { },
+                            readOnly = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+                        // Strategi Penyempurnaan (NEW)
+                        Text("Strategi Penyempurnaan", style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = viewingTraining!!.refinementStrategy,
+                            onValueChange = { },
+                            readOnly = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+                        // Performa Setelah Penyempurnaan (NEW)
+                        Text("Performa Setelah Penyempurnaan", style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = viewingTraining!!.performanceAfterRefinement,
+                            onValueChange = { },
+                            readOnly = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { viewingTraining = null },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007bff)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Tutup", color = Color.White)
                         }
                     }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun ModelTrainingForm(
-    projects: List<Project>,
-    initialTraining: ModelTraining? = null,
-    onSave: (ModelTraining) -> Unit,
-    onCancel: () -> Unit,
-    modifier: Modifier = Modifier // Add a modifier parameter
-) {
-    // Corrected date format from "dd MMMADIUM" to "dd MMM yyyy" or "dd MMM yyyy HH:mm:ss"
-    // Using "dd MMM yyyy" to match common date display without time.
-    val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-    val today = dateFormat.format(Date())
-
-    var projectName by rememberSaveable { mutableStateOf(initialTraining?.projectName ?: "") }
-    var modelName by rememberSaveable { mutableStateOf(initialTraining?.modelName ?: "") }
-    var modelType by rememberSaveable { mutableStateOf(initialTraining?.modelType ?: "") }
-    var algorithm by rememberSaveable { mutableStateOf(initialTraining?.algorithm ?: "") }
-    var hyperparameters by rememberSaveable { mutableStateOf(initialTraining?.hyperparameters ?: "") }
-    var trainingData by rememberSaveable { mutableStateOf(initialTraining?.trainingData ?: "") }
-    var evaluationMetric by rememberSaveable { mutableStateOf(initialTraining?.evaluationMetric ?: "") }
-    var performance by rememberSaveable { mutableStateOf(initialTraining?.performance ?: "") }
-    var trainedBy by rememberSaveable { mutableStateOf(initialTraining?.trainedBy ?: "") }
-    var modelPath by rememberSaveable { mutableStateOf(initialTraining?.modelPath ?: "") }
-
-    Column(modifier = modifier // Use the passed modifier from TrainModelScreen
-        .fillMaxWidth()
-        .padding(8.dp)
-        .verticalScroll(rememberScrollState()) // The form itself uses verticalScroll for its content
-    ) {
-        ProjectDropdown("Pilih Proyek", projectName, projects.map { it.projectName }) {
-            projectName = it
-        }
-        CustomTextField("Nama Model", modelName) { modelName = it }
-        CustomTextField("Tipe Model", modelType) { modelType = it }
-        CustomTextField("Algoritma", algorithm) { algorithm = it }
-        CustomTextField("Hyperparameter", hyperparameters) { hyperparameters = it }
-        CustomTextField("Data Latih", trainingData) { trainingData = it }
-        CustomTextField("Metrik Evaluasi", evaluationMetric) { evaluationMetric = it }
-        CustomTextField("Performa Model", performance) { performance = it }
-        CustomTextField("Dilatih Oleh", trainedBy) { trainedBy = it }
-        CustomTextField("Path Model", modelPath) { modelPath = it }
-
-        Row(modifier = Modifier.padding(top = 8.dp)) {
-            Button(onClick = {
-                if (projectName.isNotBlank() && modelName.isNotBlank()) {
-                    onSave(
-                        ModelTraining(
-                            id = initialTraining?.id ?: 0,
-                            projectName, modelName, modelType, algorithm,
-                            hyperparameters, trainingData, evaluationMetric,
-                            performance, trainedBy,
-                            trainingDate = initialTraining?.trainingDate ?: today, // Keep original trainingDate if editing
-                            modelPath = modelPath,
-                            createdDate = initialTraining?.createdDate ?: today, // Keep original createdDate if editing
-                            lastUpdated = today // Always update lastUpdated to today
-                        )
-                    )
                 }
-            }) {
-                Text("Simpan")
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            OutlinedButton(onClick = onCancel) {
-                Text("Batal")
-            }
+        }
+
+        // Delete Confirmation Dialog
+        if (showDeleteConfirmationDialog && trainingToDelete != null) {
+            DeleteConfirmationDialog(
+                entry = trainingToDelete!!,
+                onDeleteConfirm = {
+                    trainingToDelete?.let { modelTrainingViewModel.deleteTraining(it) }
+                    showDeleteConfirmationDialog = false
+                    trainingToDelete = null
+                },
+                onDismiss = {
+                    showDeleteConfirmationDialog = false
+                    trainingToDelete = null
+                }
+            )
         }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProjectDropdown(
-    label: String,
-    selected: String,
-    items: List<String>,
-    onSelected: (String) -> Unit
+fun TrainModelForm(
+    allProjects: List<Project>,
+    onSubmit: (ModelTraining) -> Unit,
+    onCancel: () -> Unit,
+    initialData: ModelTraining? = null,
+    modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+
+    var selectedProject by remember { mutableStateOf(initialData?.projectName ?: "") }
     var expanded by remember { mutableStateOf(false) }
 
-    Box(modifier = Modifier
-        .fillMaxWidth()
-        .padding(vertical = 4.dp)) {
+    var modelName by remember { mutableStateOf(initialData?.modelName ?: "") }
+    var modelType by remember { mutableStateOf(initialData?.modelType ?: "") }
+    var algorithm by remember { mutableStateOf(initialData?.algorithm ?: "") }
+    var trainingData by remember { mutableStateOf(initialData?.trainingData ?: "") }
+    var performance by remember { mutableStateOf(initialData?.performance ?: "") }
 
+    var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
+    var trainedModelFileDisplayName by remember { mutableStateOf(initialData?.modelPath ?: "") }
+
+    LaunchedEffect(initialData) {
+        initialData?.modelPath?.let { path ->
+            if (path.isNotEmpty()) {
+                try {
+                    val uri = Uri.parse(path)
+                    selectedFileUri = uri
+                    val contentResolver = context.contentResolver
+                    val cursor = contentResolver.query(uri, null, null, null, null)
+                    cursor?.use {
+                        if (it.moveToFirst()) {
+                            val displayNameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                            if (displayNameIndex != -1) {
+                                trainedModelFileDisplayName = it.getString(displayNameIndex)
+                            } else {
+                                trainedModelFileDisplayName = uri.lastPathSegment ?: path
+                            }
+                        }
+                    } ?: run {
+                        trainedModelFileDisplayName = path
+                    }
+                } catch (e: Exception) {
+                    trainedModelFileDisplayName = path
+                }
+            }
+        }
+    }
+
+
+    var refinementStrategy by remember { mutableStateOf(initialData?.refinementStrategy ?: "") }
+    var performanceAfterRefinement by remember { mutableStateOf(initialData?.performanceAfterRefinement ?: "") }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            selectedFileUri = it
+            val contentResolver = context.contentResolver
+            val cursor = contentResolver.query(it, null, null, null, null)
+            cursor?.use { c ->
+                if (c.moveToFirst()) {
+                    val nameIndex = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) {
+                        trainedModelFileDisplayName = c.getString(nameIndex)
+                    } else {
+                        trainedModelFileDisplayName = it.lastPathSegment ?: it.toString()
+                    }
+                }
+            } ?: run {
+                trainedModelFileDisplayName = it.lastPathSegment ?: it.toString()
+            }
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .background(Color(0xFFF0F0F0))
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Text(
+            "Form Train Model",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        // Nama Proyek
+        Text("Nama Proyek", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(4.dp))
+        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+            OutlinedTextField(
+                value = selectedProject,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                allProjects.forEach { project ->
+                    DropdownMenuItem(
+                        text = { Text(project.projectName) },
+                        onClick = {
+                            selectedProject = project.projectName
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        // Nama Model
+        Text("Nama Model", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(4.dp))
+        OutlinedTextField(value = modelName, onValueChange = { modelName = it }, modifier = Modifier.fillMaxWidth())
+
+        Spacer(Modifier.height(12.dp))
+        // Tipe Model
+        Text("Tipe Model", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(4.dp))
+        OutlinedTextField(value = modelType, onValueChange = { modelType = it }, modifier = Modifier.fillMaxWidth())
+
+        Spacer(Modifier.height(12.dp))
+        // Algoritma
+        Text("Algoritma", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(4.dp))
+        OutlinedTextField(value = algorithm, onValueChange = { algorithm = it }, modifier = Modifier.fillMaxWidth())
+
+        Spacer(Modifier.height(12.dp))
+        // Data Pelatihan
+        Text("Data Pelatihan", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(4.dp))
+        OutlinedTextField(value = trainingData, onValueChange = { trainingData = it }, modifier = Modifier.fillMaxWidth())
+
+        Spacer(Modifier.height(12.dp))
+        // Performa Model
+        Text("Performa Model", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(4.dp))
+        OutlinedTextField(value = performance, onValueChange = { performance = it }, modifier = Modifier.fillMaxWidth())
+
+        Spacer(Modifier.height(12.dp))
+        // File Model Terlatih (dengan fungsi upload)
+        Text("File Model Terlatih", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(4.dp))
         OutlinedTextField(
-            value = selected,
-            onValueChange = { /* Read-only. Value is set via DropdownMenuItem click. */ },
-            label = { Text(label) },
-            readOnly = true,
+            value = trainedModelFileDisplayName, // Menampilkan nama file
+            onValueChange = { trainedModelFileDisplayName = it }, // Bisa diubah manual jika perlu
+            readOnly = true, // Disarankan read-only saat menggunakan file picker
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { expanded = true },
+                .clickable { filePickerLauncher.launch("*/*") }, // Membuka pemilih file saat diklik
             trailingIcon = {
-                Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown Arrow")
+                IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
+                    Icon(imageVector = Icons.Default.FileUpload, contentDescription = "Pilih File Model")
+                }
             }
         )
 
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
+        Spacer(Modifier.height(12.dp))
+        // Strategi Penyempurnaan
+        Text("Strategi Penyempurnaan", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(4.dp))
+        OutlinedTextField(value = refinementStrategy, onValueChange = { refinementStrategy = it }, modifier = Modifier.fillMaxWidth())
+
+        Spacer(Modifier.height(12.dp))
+        // Performa Setelah Penyempurnaan
+        Text("Performa Setelah Penyempurnaan", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(4.dp))
+        OutlinedTextField(value = performanceAfterRefinement, onValueChange = { performanceAfterRefinement = it }, modifier = Modifier.fillMaxWidth())
+
+        Spacer(Modifier.height(24.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items.forEach { item ->
-                DropdownMenuItem(
-                    text = { Text(item) },
-                    onClick = {
-                        onSelected(item)
-                        expanded = false
-                    }
-                )
+            Button(
+                onClick = { onCancel() },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007bff)),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+            ) {
+                Text("Return", color = Color.White)
+            }
+            Button(
+                onClick = {
+                    val newTraining = ModelTraining(
+                        id = initialData?.id ?: 0,
+                        projectName = selectedProject,
+                        modelName = modelName,
+                        modelType = modelType,
+                        algorithm = algorithm,
+                        trainingData = trainingData,
+                        performance = performance,
+                        modelPath = selectedFileUri?.toString() ?: "", // Simpan URI sebagai string
+                        refinementStrategy = refinementStrategy,
+                        performanceAfterRefinement = performanceAfterRefinement
+                    )
+                    onSubmit(newTraining)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF28a745)),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+            ) {
+                Text("Save Changes", color = Color.White)
             }
         }
     }
 }
 
+// Reused and adapted from your previous request for delete confirmation
 @Composable
-fun CustomTextField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit
+fun DeleteConfirmationDialog(
+    entry: ModelTraining, // Changed parameter type to ModelTraining
+    onDeleteConfirm: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = null,
+        text = {
+            Column(
+                modifier = Modifier
+                    .background(Color.White, shape = RoundedCornerShape(24.dp))
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Apakah Ingin menghapus ?",
+                    color = Color(0xFFD87AB2), // soft pink
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = entry.modelName, // Displaying modelName for context
+                    color = Color.Gray,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFCC66)),
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Return", color = Color.White)
+                    }
+                    Button(
+                        onClick = {
+                            onDeleteConfirm()
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6F6F)),
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Delete", color = Color.White)
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {}
     )
 }

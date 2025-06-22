@@ -1,6 +1,8 @@
 package com.example.test.screen
 
+import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.compose.foundation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,18 +26,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.*
 import coil.compose.AsyncImage
 import com.example.test.R
 import com.example.test.data.Project
-import com.example.test.screens.ProfileScreen
+import com.example.test.data.MeaningfulObjectives
+import com.example.test.data.ProjectWithMeaningfulObjectives
+import com.example.test.screens.ProfileScreen // Make sure this import is correct if ProfileScreen is used elsewhere
 import com.example.test.viewmodel.ProfileViewModel
-import com.example.test.screen.ContentScreen
-import com.example.test.util.UserDataStore
 import com.example.test.viewmodel.ProjectViewModel
+import com.example.test.viewmodel.MeaningfulObjectivesViewModel
+import com.example.test.viewmodel.UserViewModel
 import kotlinx.coroutines.launch
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,17 +76,55 @@ fun DashboardMainScreen() {
     val navBackStackEntry by internalNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "dashboard"
     val context = LocalContext.current
-    val viewModel: ProjectViewModel = viewModel(factory = ProjectViewModel.Factory(context.applicationContext as android.app.Application))
-    val projects by viewModel.allProjects.observeAsState(initial = emptyList())
+    val application = context.applicationContext as Application
+
+    val projectViewModel: ProjectViewModel = viewModel(
+        factory = ProjectViewModel.Factory(application)
+    )
+    val meaningfulObjectivesViewModel: MeaningfulObjectivesViewModel = viewModel(
+        factory = MeaningfulObjectivesViewModel.Factory(application)
+    )
+    // Instantiate UserViewModel
+    val userViewModel: UserViewModel = viewModel(
+        factory = UserViewModel.Factory(application)
+    )
+    // Instantiate ProfileViewModel
+    val profileViewModel: ProfileViewModel = viewModel(
+        factory = ProfileViewModel.Factory(application)
+    )
+
+    val loggedInUser by userViewModel.loggedInUser.observeAsState(initial = null)
+
+    val loggedInUsernameLiveData: MutableLiveData<String?> = remember { MutableLiveData() }
+
+    LaunchedEffect(loggedInUser) {
+        loggedInUsernameLiveData.value = loggedInUser?.username
+    }
+
+    LaunchedEffect(profileViewModel) { // Only run when profileViewModel changes (effectively once)
+        profileViewModel.setLoggedInUsername(loggedInUsernameLiveData)
+    }
+
+
+    val localProjects by projectViewModel.allLocalProjects.observeAsState(emptyList())
+    val apiProjects by projectViewModel.apiProjects.observeAsState(emptyList())
+
+    val allProjectsWithMeaningfulObjectivesFromApi by meaningfulObjectivesViewModel.apiMeaningfulObjectives.observeAsState(emptyList())
+
+    val combinedMainProjects = remember(localProjects, apiProjects) {
+        (localProjects + apiProjects).distinctBy { it.id }.sortedBy { it.projectName }
+    }
 
     val title = when (currentRoute) {
-        "data_entry" -> "Data Entry"
+        "data_entry" -> "Problem Framing"
         "train_model" -> "Train Model"
         "profile" -> "Edit Profil"
         "data_api" -> "Data API"
         "project" -> "Projek"
         "request_dataset" -> "Request Dataset"
         "data_processing" -> "Data Processing"
+        "dataset" -> "Dataset"
+        "documentation" -> "Documentation"
         else -> "Dashboard"
     }
 
@@ -87,7 +132,8 @@ fun DashboardMainScreen() {
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
-                Sidebar(internalNavController)
+                // Pass the profileViewModel to the Sidebar
+                Sidebar(internalNavController, profileViewModel)
             }
         }
     ) {
@@ -99,25 +145,21 @@ fun DashboardMainScreen() {
             }
         ) { innerPadding ->
             Box(modifier = Modifier.padding(innerPadding)) {
-                NavigationHost(internalNavController, projects)
+                NavigationHost(
+                    navController = internalNavController,
+                    combinedMainProjects = combinedMainProjects,
+                    allProjectsWithMeaningfulObjectives = allProjectsWithMeaningfulObjectivesFromApi,
+                    meaningfulObjectivesViewModel = meaningfulObjectivesViewModel
+                )
             }
         }
     }
 }
 
 @Composable
-fun Sidebar(navController: NavHostController, viewModel: ProfileViewModel = viewModel()) {
-    val context = LocalContext.current
-
-    val usernameFlow = remember { UserDataStore.getUsername(context) }
-    val username by usernameFlow.collectAsState(initial = null)
-    val displayedUsername = username ?: "Admin"
-
-    LaunchedEffect(username) {
-        username?.let { viewModel.loadProfile(it) }
-    }
-
-    val profile by viewModel.profile.observeAsState()
+fun Sidebar(navController: NavHostController, profileViewModel: ProfileViewModel) { // ViewModel is now passed as a parameter
+    val profile by profileViewModel.profile.observeAsState()
+    val displayedUsername = profile?.username ?: "Admin" // Get username from profile
 
     Column(
         modifier = Modifier
@@ -177,9 +219,36 @@ fun Sidebar(navController: NavHostController, viewModel: ProfileViewModel = view
                 launchSingleTop = true
             }
         }
+        DrawerItem(icon = Icons.Default.Work, label = "Project") {
+            navController.navigate("project") {
+                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
 
-        DrawerItem(icon = Icons.Default.Edit, label = "Data Entry") {
+        DrawerItem(icon = Icons.Default.Edit, label = "Problem Framing") {
             navController.navigate("data_entry") {
+                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+
+        DrawerItem(icon = Icons.Default.Work, label = "Request Dataset") {
+            navController.navigate("request_dataset") {
+                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+
+        DrawerItem(icon = Icons.Default.Work, label = "Dataset") {
+            navController.navigate("dataset") {
+                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+
+        DrawerItem(icon = Icons.Default.Work, label = "Data Processing") {
+            navController.navigate("data_processing") {
                 popUpTo(navController.graph.startDestinationId) { inclusive = true }
                 launchSingleTop = true
             }
@@ -191,27 +260,8 @@ fun Sidebar(navController: NavHostController, viewModel: ProfileViewModel = view
                 launchSingleTop = true
             }
         }
-
-        DrawerItem(icon = Icons.Default.CloudDownload, label = "API") {
-            navController.navigate("data_api") {
-                popUpTo(navController.graph.startDestinationId) { inclusive = true }
-                launchSingleTop = true
-            }
-        }
-        DrawerItem(icon = Icons.Default.Work, label = "Project") {
-            navController.navigate("project") {
-                popUpTo(navController.graph.startDestinationId) { inclusive = true }
-                launchSingleTop = true
-            }
-        }
-        DrawerItem(icon = Icons.Default.Work, label = "Request Dataset") {
-            navController.navigate("request_dataset") {
-                popUpTo(navController.graph.startDestinationId) { inclusive = true }
-                launchSingleTop = true
-            }
-        }
-        DrawerItem(icon = Icons.Default.Work, label = "Data Processing") {
-            navController.navigate("data_processing") {
+        DrawerItem(icon = Icons.Default.Work, label = "Documentation") {
+            navController.navigate("documentation") {
                 popUpTo(navController.graph.startDestinationId) { inclusive = true }
                 launchSingleTop = true
             }
@@ -240,10 +290,20 @@ fun DrawerItem(icon: ImageVector, label: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun NavigationHost(navController: NavHostController, projects: List<Project>) {
+fun NavigationHost(
+    navController: NavHostController,
+    combinedMainProjects: List<Project>,
+    allProjectsWithMeaningfulObjectives: List<ProjectWithMeaningfulObjectives>,
+    meaningfulObjectivesViewModel: MeaningfulObjectivesViewModel
+) {
     NavHost(navController = navController, startDestination = "dashboard") {
         composable("dashboard") {
-            DashboardScreen(projects, navController)
+            DashboardScreen(
+                combinedMainProjects,
+                allProjectsWithMeaningfulObjectives,
+                meaningfulObjectivesViewModel,
+                navController
+            )
         }
         composable("data_entry") {
             DataEntryScreen(navController)
@@ -254,24 +314,89 @@ fun NavigationHost(navController: NavHostController, projects: List<Project>) {
         composable("profile") {
             ProfileScreen(navController)
         }
-        composable("data_api") {
-            ContentScreen()
-        }
+
         composable("project") {
             ProjectScreen(navController)
         }
         composable("request_dataset") {
             RequestDatasetScreen(navController)
         }
+        composable("dataset") {
+            DatasetScreen(navController)
+        }
         composable("data_processing") {
             DataProcessingScreen(navController)
+        }
+        composable("documentation") {
+            DocumentationScreen(navController)
         }
     }
 }
 
 @Composable
-fun DashboardScreen(projects: List<Project>, navController: NavHostController)
-{
+fun DashboardScreen(
+    projects: List<Project>,
+    allProjectsWithMeaningfulObjectives: List<ProjectWithMeaningfulObjectives>,
+    meaningfulObjectivesViewModel: MeaningfulObjectivesViewModel,
+    navController: NavHostController
+) {
+    var showProjectDetailDialog by remember { mutableStateOf(false) }
+    var selectedProject by remember { mutableStateOf<Project?>(null) }
+
+    var showMODetailDialog by remember { mutableStateOf(false) }
+    var selectedProjectWithMeaningfulObjective by remember { mutableStateOf<ProjectWithMeaningfulObjectives?>(null) }
+
+    val selectedProjectMeaningfulObjectives by meaningfulObjectivesViewModel
+        .getMeaningfulObjectivesForProjectFromRoom(selectedProject?.id ?: 0)
+        .observeAsState(initial = null)
+
+
+    LaunchedEffect(selectedProject) {
+        // Logika tambahan jika diperlukan saat selectedProject berubah, misalnya untuk reset
+    }
+
+    // --- IMPORTANT: Logging for project data and status parsing ---
+    LaunchedEffect(projects) {
+        Log.d("ProjectStatusDebug", "--- Projects Received in DashboardScreen ---")
+        Log.d("ProjectStatusDebug", "Total projects: ${projects.size}")
+        if (projects.isEmpty()) {
+            Log.d("ProjectStatusDebug", "Project list is EMPTY. Check data loading (API/Local).")
+        }
+        projects.forEachIndexed { index, project ->
+            // Use .trim() just in case there are leading/trailing spaces in your actual data
+            val statusCleaned = project.status?.trim()
+            val statusLowercased = statusCleaned?.lowercase()
+            Log.d("ProjectStatusDebug", "$index: Name='${project.projectName}', Raw Status='${project.status}', Cleaned Status='${statusCleaned}', Lowercased Status='${statusLowercased}'")
+        }
+        Log.d("ProjectStatusDebug", "--- End Projects Log ---")
+    }
+
+    // Calculate project status distribution
+    val doneProjects = projects.count {
+        val statusLowercased = it.status?.trim()?.lowercase() // Use .trim() for robustness
+        val isComplete = statusLowercased == "done" // <-- DIUBAH DARI "complete" KE "done"
+        if (isComplete) {
+            Log.d("ProjectCountMatch", "Matched 'done': ${it.projectName}") // Perbarui log juga
+        }
+        isComplete
+    }
+    val pendingProjects = projects.count {
+        val statusLowercased = it.status?.trim()?.lowercase() // Use .trim() for robustness
+        val isOnGoing = statusLowercased == "pending" // <-- DIUBAH DARI "on going" KE "pending"
+        if (isOnGoing) {
+            Log.d("ProjectCountMatch", "Matched 'pending': ${it.projectName}") // Perbarui log juga
+        }
+        isOnGoing
+    }
+
+    Log.d("ProjectCountSummary", "Final Done Projects: $doneProjects")
+    Log.d("ProjectCountSummary", "Final Pending Projects: $pendingProjects")
+
+
+    // Determine the maximum count for scaling the bars
+    val maxCount = maxOf(doneProjects, pendingProjects, 1) // Ensure it's at least 1 to avoid division by zero
+
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -286,84 +411,106 @@ fun DashboardScreen(projects: List<Project>, navController: NavHostController)
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = 16.dp)
         )
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-            Text("Deteksi Hewan")
-        }
-
+        // --- Start of new "Distribusi Status Proyek" Card ---
         Card(
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFDADA)),
+            colors = CardDefaults.cardColors(containerColor = Color.White), // White background for the chart
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(8.dp)
+                .height(200.dp) // Set a fixed height for the chart card
         ) {
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text("Visualisasi Proses Training", fontWeight = FontWeight.Bold)
-                Row {
-                    Image(
-                        painter = painterResource(R.drawable.train),
-                        contentDescription = null,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF8A7)),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text("Perbandingan akurasi antar model", fontWeight = FontWeight.Medium)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = "Distribusi Status Proyek",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                // Legend
                 Row(
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("45%", color = Color.Blue, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .height(60.dp)
-                                .width(30.dp)
-                                .background(Color.Blue)
+                                .size(12.dp)
+                                .background(Color(0xFF8BC34A)) // Green for Done
                         )
-                        Text("CNN")
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Selesai", fontSize = 12.sp)
                     }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("65%", color = Color.Magenta, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .height(90.dp)
-                                .width(30.dp)
-                                .background(Color.Magenta)
+                                .size(12.dp)
+                                .background(Color(0xFF2196F3)) // Blue for Pending
                         )
-                        Text("MobileNet")
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Sedang Berjalan", fontSize = 12.sp)
                     }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("85%", color = Color.Red, fontWeight = FontWeight.Bold)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f), // Take remaining vertical space
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    // Bar for Done Projects
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = doneProjects.toString(), // Display the count
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = Color(0xFF8BC34A) // Match bar color: Green
+                        )
+                        Spacer(modifier = Modifier.height(4.dp)) // Small space between count and bar
                         Box(
                             modifier = Modifier
-                                .height(110.dp)
-                                .width(30.dp)
-                                .background(Color.Red)
+                                .fillMaxWidth(0.6f) // Adjust bar width
+                                .height((doneProjects.toFloat() / maxCount * 100).dp) // Scaled height, max 100dp
+                                .background(Color(0xFF8BC34A)) // Green for Done bar
                         )
-                        Text("VGG16")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Done", fontSize = 14.sp)
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp)) // Space between bars
+
+                    // Bar for Pending Projects
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = pendingProjects.toString(), // Display the count
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = Color(0xFF2196F3) // Match bar color: Blue
+                        )
+                        Spacer(modifier = Modifier.height(4.dp)) // Small space between count and bar
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.6f) // Adjust bar width
+                                .height((pendingProjects.toFloat() / maxCount * 100).dp) // Scaled height, max 100dp
+                                .background(Color(0xFF2196F3)) // Blue for Pending bar
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Pending", fontSize = 14.sp)
                     }
                 }
             }
         }
+        // --- End of new "Distribusi Status Proyek" Card ---
 
         Text("Daftar Proyek Terbaru", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
 
-        // Scroll Horizontal Table
         Box(modifier = Modifier
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 8.dp)) {
@@ -373,7 +520,7 @@ fun DashboardScreen(projects: List<Project>, navController: NavHostController)
                     TableHeaderCell("Nama Proyek", 120.dp)
                     TableHeaderCell("Deskripsi", 120.dp)
                     TableHeaderCell("Status", 80.dp)
-                    TableHeaderCell("Dibuat Oleh", 100.dp)
+                    TableHeaderCell("Supervisor", 100.dp)
                     TableHeaderCell("Tanggal Dibuat", 120.dp)
                     TableHeaderCell("Aksi", 100.dp)
                 }
@@ -384,12 +531,21 @@ fun DashboardScreen(projects: List<Project>, navController: NavHostController)
                         .padding(8.dp)) {
                         TableCell((index + 1).toString(), 40.dp)
                         TableCell(project.projectName, 120.dp)
-                        TableCell(project.description ?: "-", 120.dp)
+                        TableCell(project.description, 120.dp)
                         StatusCell(project.status, 80.dp)
-                        TableCell(project.createdBy ?: "N/A", 100.dp)
-                        TableCell(project.startDate ?: "N/A", 120.dp)
+                        TableCell(project.clientName, 100.dp)
+                        TableCell(project.startDate, 120.dp)
                         Row(modifier = Modifier.width(100.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Button(onClick = { /* TODO: Handle View */ }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))) {
+                            Button(
+                                onClick = {
+                                    selectedProject = project
+                                    showProjectDetailDialog = true
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                                shape = RoundedCornerShape(4.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
                                 Text("View", fontSize = 12.sp, color = Color.White)
                             }
                         }
@@ -398,10 +554,11 @@ fun DashboardScreen(projects: List<Project>, navController: NavHostController)
             }
         }
 
-        // Tombol bawah
+        Spacer(modifier = Modifier.height(16.dp))
+
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
         ) {
             Button(
                 onClick = { navController.navigate("project") },
@@ -410,6 +567,39 @@ fun DashboardScreen(projects: List<Project>, navController: NavHostController)
                 Text("Buat Proyek Baru", color = Color.White)
             }
         }
+
+        Text("Meaningful Objectives", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp))
+
+        MeaningfulObjectivesTable(
+            projectsWithMeaningfulObjectives = allProjectsWithMeaningfulObjectives,
+            onViewClick = { projWithMo ->
+                selectedProjectWithMeaningfulObjective = projWithMo
+                showMODetailDialog = true
+            }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+
+    if (showProjectDetailDialog && selectedProject != null) {
+        ProjectDetailDialog(
+            project = selectedProject!!,
+            meaningfulObjectives = selectedProjectMeaningfulObjectives,
+            onDismissRequest = {
+                showProjectDetailDialog = false
+                selectedProject = null
+            }
+        )
+    }
+
+    if (showMODetailDialog && selectedProjectWithMeaningfulObjective != null) {
+        MeaningfulObjectiveDetailDialog(
+            projectWithMeaningfulObjective = selectedProjectWithMeaningfulObjective!!,
+            onDismissRequest = {
+                showMODetailDialog = false
+                selectedProjectWithMeaningfulObjective = null
+            }
+        )
     }
 }
 
@@ -425,12 +615,22 @@ fun TableHeaderCell(text: String, width: Dp) {
     )
 }
 
+@Composable
+fun TableCell(text: String?, width: Dp) {
+    Text(
+        text ?: "-",
+        modifier = Modifier
+            .width(width)
+            .padding(4.dp),
+        fontSize = 14.sp
+    )
+}
 
 @Composable
 fun StatusCell(status: String?, width: Dp) {
     val color = when (status?.lowercase()) {
-        "completed" -> Color(0xFF4CAF50)
-        "ongoing" -> Color(0xFF03A9F4)
+        "done" -> Color(0xFF4CAF50) // <-- DIUBAH DARI "complete" KE "done"
+        "pending" -> Color(0xFF03A9F4) // <-- DIUBAH DARI "on going" KE "pending"
         else -> Color.Gray
     }
 
@@ -442,5 +642,210 @@ fun StatusCell(status: String?, width: Dp) {
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
         Text(status ?: "-", color = Color.White, fontSize = 12.sp)
+    }
+}
+
+@Composable
+fun ProjectDetailDialog(project: Project, meaningfulObjectives: MeaningfulObjectives?, onDismissRequest: () -> Unit) {
+    Dialog(onDismissRequest = onDismissRequest) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(
+                    text = "Detail Proyek",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFE58DD6),
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                ProjectDetailItem(label = "Nama Proyek", value = project.projectName)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ProjectDetailItem(label = "Deskripsi", value = project.description)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ProjectDetailItem(label = "Lokasi", value = project.location)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ProjectDetailItem(label = "Supervisor", value = project.clientName)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ProjectDetailItem(label = "Start Date", value = project.startDate)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ProjectDetailItem(label = "End Date", value = project.endDate)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                meaningfulObjectives?.let { objectives ->
+                    Text(
+                        text = "Meaningful Objectives",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE58DD6),
+                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                    )
+                    ProjectDetailItem(label = "Organizational", value = objectives.organizational)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ProjectDetailItem(label = "Leading Indicators", value = objectives.leadingIndicators)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ProjectDetailItem(label = "User Outcomes", value = objectives.userOutcomes)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ProjectDetailItem(label = "Model Properties", value = objectives.modelProperties)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                Button(
+                    onClick = onDismissRequest,
+                    modifier = Modifier.align(Alignment.End),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE58DD6))
+                ) {
+                    Text("Close", color = Color.White)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MeaningfulObjectiveDetailDialog(projectWithMeaningfulObjective: ProjectWithMeaningfulObjectives, onDismissRequest: () -> Unit) {
+    Dialog(onDismissRequest = onDismissRequest) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(
+                    text = "Detail Meaningful Objective",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFE58DD6),
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // Akses projectName langsung dari projectWithMeaningfulObjective
+                ProjectDetailItem(label = "Project ID", value = projectWithMeaningfulObjective.id.toString())
+                Spacer(modifier = Modifier.height(8.dp))
+                ProjectDetailItem(label = "Project Name", value = projectWithMeaningfulObjective.projectName) // <-- Akses langsung
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Akses meaningfulObjectives dari projectWithMeaningfulObjective
+                projectWithMeaningfulObjective.meaningfulObjectives?.let { objectives ->
+                    ProjectDetailItem(label = "Organizational", value = objectives.organizational)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ProjectDetailItem(label = "Leading Indicators", value = objectives.leadingIndicators)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ProjectDetailItem(label = "User Outcomes", value = objectives.userOutcomes)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ProjectDetailItem(label = "Model Properties", value = objectives.modelProperties)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+
+                Button(
+                    onClick = onDismissRequest,
+                    modifier = Modifier.align(Alignment.End),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE58DD6))
+                ) {
+                    Text("Close", color = Color.White)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProjectDetailItem(label: String, value: String?) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            fontWeight = FontWeight.Medium,
+            fontSize = 14.sp,
+            color = Color.Gray,
+            modifier = Modifier.padding(bottom = 2.dp)
+        )
+        Text(
+            text = value ?: "N/A",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Normal,
+            color = Color.Black,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFF0F0F0), RoundedCornerShape(4.dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        )
+    }
+}
+
+// MeaningfulObjectivesTable sekarang menerima List<ProjectWithMeaningfulObjectives>
+@Composable
+fun MeaningfulObjectivesTable(
+    projectsWithMeaningfulObjectives: List<ProjectWithMeaningfulObjectives>, // <-- Ubah parameter
+    onViewClick: (ProjectWithMeaningfulObjectives) -> Unit // <-- Ubah tipe parameter callback
+) {
+    // Filter hanya proyek yang benar-benar memiliki meaningful_objectives
+    val meaningfulObjectivesData = projectsWithMeaningfulObjectives.filter { it.meaningfulObjectives != null }
+
+
+    Box(modifier = Modifier
+        .horizontalScroll(rememberScrollState())
+        .padding(horizontal = 8.dp)) {
+        Column {
+            Row(modifier = Modifier.background(Color(0xFFF1F1F1)).padding(8.dp)) {
+                TableHeaderCell("#", 40.dp)
+                TableHeaderCell("Project ID", 100.dp)
+                TableHeaderCell("Project Name", 150.dp)
+                TableHeaderCell("Organizational", 150.dp)
+                TableHeaderCell("Leading Indicators", 150.dp)
+                TableHeaderCell("User Outcomes", 150.dp)
+                TableHeaderCell("Model Properties", 150.dp)
+                TableHeaderCell("Aksi", 100.dp)
+            }
+
+            meaningfulObjectivesData.forEachIndexed { index, projWithMo ->
+                val mo = projWithMo.meaningfulObjectives // Dapatkan objek MO bersarangnya
+
+                Row(modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)) {
+                    TableCell((index + 1).toString(), 40.dp)
+                    TableCell(projWithMo.id.toString(), 100.dp) // ID Proyek
+                    TableCell(projWithMo.projectName, 150.dp) // Nama Proyek langsung
+                    TableCell(mo?.organizational, 150.dp) // Akses dari objek bersarang
+                    TableCell(mo?.leadingIndicators, 150.dp)
+                    TableCell(mo?.userOutcomes, 150.dp)
+                    TableCell(mo?.modelProperties, 150.dp)
+                    Row(modifier = Modifier.width(100.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Button(
+                            onClick = { onViewClick(projWithMo) }, // Teruskan ProjectWithMeaningfulObjectives
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                            shape = RoundedCornerShape(4.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("View", fontSize = 12.sp, color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -24,6 +24,22 @@ class DatasetViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun updateReqDataset(req: DatasetRequest) {
+        viewModelScope.launch {
+            dao.updateReqDataset(req)
+        }
+    }
+
+    fun deleteReqDataset(req: DatasetRequest) {
+        viewModelScope.launch {
+            dao.deleteReqDataset(req)
+        }
+    }
+
+    suspend fun getReqDatasetById(id: Int): DatasetRequest? {
+        return dao.getReqDatasetById(id)
+    }
+
     companion object {
         fun Factory(application: Application): ViewModelProvider.Factory =
             object : ViewModelProvider.AndroidViewModelFactory(application) {

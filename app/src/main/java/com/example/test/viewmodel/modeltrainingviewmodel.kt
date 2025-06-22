@@ -9,53 +9,41 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+// Removed unused date imports
+// import java.text.SimpleDateFormat
+// import java.util.Date
+// import java.util.Locale
 
 class ModelTrainingViewModel(application: Application) : AndroidViewModel(application) {
 
     private val dao = AppDatabase.getDatabase(application).modelTrainingDao()
 
-    // StateFlow untuk memantau perubahan daftar model training secara real-time
+    // StateFlow to observe real-time changes in the list of model trainings
     val modelTrainings: StateFlow<List<ModelTraining>> = dao.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
-    // Fungsi untuk menambahkan model training baru
+    // Function to add a new model training
     fun addTraining(training: ModelTraining) {
         viewModelScope.launch {
-            val today = getTodayDate()
-            dao.insert(
-                training.copy(
-                    createdDate = today,
-                    lastUpdated = today
-                )
-            )
+            // No date fields to set anymore
+            dao.insert(training)
         }
     }
 
-    // Fungsi untuk mengupdate model training
+    // Function to update a model training
     fun updateTraining(training: ModelTraining) {
         viewModelScope.launch {
-            val today = getTodayDate()
-            dao.update(
-                training.copy(
-                    lastUpdated = today // Update lastUpdated date
-                )
-            )
+            // No date fields to update anymore
+            dao.update(training)
         }
     }
 
-    // Fungsi untuk menghapus model training
+    // Function to delete a model training
     fun deleteTraining(training: ModelTraining) {
         viewModelScope.launch {
             dao.delete(training)
         }
     }
 
-    // Mendapatkan tanggal hari ini dalam format "dd MMM yyyy"
-    private fun getTodayDate(): String {
-        val formatter = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-        return formatter.format(Date())
-    }
+    // Removed getTodayDate() function as it's no longer needed
 }

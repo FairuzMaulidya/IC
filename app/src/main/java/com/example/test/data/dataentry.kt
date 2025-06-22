@@ -7,12 +7,14 @@ import androidx.room.PrimaryKey
 data class DataEntry(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val projectName: String = "",
-    val problemDescription: String = "",
-    val target: String = "",
+    val problemDescription: String = "", // Deskripsi Masalah
+    val target: String = "",             // Target/Tujuan
     val stock: String = "",
     val inflow: String = "",
     val outflow: String = "",
-    val keyFeatures: String = ""
+    val dataNeeded: String = "",         // Data Diperlukan (NEW)
+    val framedBy: String = "",           // Diframe Oleh (NEW)
+    val dateCreated: String = ""        // Tanggal Dibuat (NEW)
 ) {
     /** Helper used by the UI to copy the correct field with a new value */
     fun copyField(field: String, value: String): DataEntry = when (field) {
@@ -22,7 +24,9 @@ data class DataEntry(
         "stock" -> copy(stock = value)
         "inflow" -> copy(inflow = value)
         "outflow" -> copy(outflow = value)
-        "keyFeatures" -> copy(keyFeatures = value)
+        "dataNeeded" -> copy(dataNeeded = value) // NEW
+        "framedBy" -> copy(framedBy = value)     // NEW
+        "dateCreated" -> copy(dateCreated = value) // NEW
         else -> this
     }
 }

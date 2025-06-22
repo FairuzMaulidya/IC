@@ -11,4 +11,13 @@ interface ReqDatasetDao {
 
     @Query("SELECT * FROM dataset_request ORDER BY id DESC")
     fun getAllReqDatasets(): Flow<List<DatasetRequest>>
+
+    @Query("SELECT * FROM dataset_request WHERE id = :id")
+    suspend fun getReqDatasetById(id: Int): DatasetRequest?
+
+    @Update
+    suspend fun updateReqDataset(req: DatasetRequest)
+
+    @Delete
+    suspend fun deleteReqDataset(req: DatasetRequest)
 }

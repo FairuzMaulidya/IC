@@ -10,13 +10,9 @@ data class ModelTraining(
     val modelName: String,
     val modelType: String,
     val algorithm: String,
-    val hyperparameters: String,
     val trainingData: String,
-    val evaluationMetric: String,
     val performance: String,
-    val trainedBy: String,
-    val trainingDate: String,
-    val modelPath: String,
-    val createdDate: String,
-    val lastUpdated: String
+    val modelPath: String, // Tetap gunakan nama ini untuk "File Model Terlatih"
+    val refinementStrategy: String, // Kolom baru
+    val performanceAfterRefinement: String, // Kolom baru
 )
