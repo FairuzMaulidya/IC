@@ -10,7 +10,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.livedata.observeAsState // Tetap menggunakan observeAsState
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,8 +28,6 @@ import com.example.test.viewmodel.ProjectViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
-// import com.example.test.network.ApiService // TIDAK LAGI DIPERLUKAN DI SINI
-// import com.example.test.network.RetrofitClient // TIDAK LAGI DIPERLUKAN DI SINI
 
 @Composable
 fun Color.luminance(): Float {
@@ -49,9 +47,7 @@ fun ProjectScreen(
         factory = ProjectViewModel.Factory(LocalContext.current.applicationContext as Application)
     )
 ) {
-    // Ambil proyek lokal dari ViewModel
     val localProjects by projectViewModel.allLocalProjects.observeAsState(emptyList())
-    // Ambil proyek API dari ViewModel
     val apiProjects by projectViewModel.apiProjects.observeAsState(emptyList())
 
     val coroutineScope = rememberCoroutineScope()
@@ -59,9 +55,12 @@ fun ProjectScreen(
 
     // Gabungkan proyek lokal dan API, lalu urutkan
     val combinedProjects = remember(localProjects, apiProjects) {
-        // Filter proyek lokal agar tidak duplikat dengan API jika isFromApi true
+        // Buat set untuk melacak ID proyek API yang sudah ada
+        val apiProjectIds = apiProjects.map { it.id }.toSet()
+
+        // Filter proyek lokal: hanya masukkan yang ID-nya tidak ada di API atau yang isFromApi-nya false (benar-benar lokal)
         val uniqueLocalProjects = localProjects.filter { localProject ->
-            apiProjects.none { apiProject -> apiProject.id == localProject.id && apiProject.isFromApi }
+            !localProject.isFromApi || !apiProjectIds.contains(localProject.id)
         }
         (uniqueLocalProjects + apiProjects).sortedBy { it.projectName }
     }
@@ -77,8 +76,7 @@ fun ProjectScreen(
     var endDate by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Pending") }
     val statusOptions = listOf("Pending", "Done")
-    var isCurrentProjectFromApi by remember { mutableStateOf(false) }
-
+    var isCurrentProjectFromApi by remember { mutableStateOf(false) } // Menandakan apakah proyek yang sedang diedit berasal dari API
 
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
@@ -92,7 +90,7 @@ fun ProjectScreen(
         startDate = ""
         endDate = ""
         status = "Pending"
-        isCurrentProjectFromApi = false
+        isCurrentProjectFromApi = false // Reset status ini juga
     }
 
     val tableHeaderBackgroundColor = Color(0xFFF0F0F0)
@@ -105,10 +103,7 @@ fun ProjectScreen(
     val statusOngoingTextColor = Color(0xFF2196F3)
     val statusCompleteBgColor = Color(0xFFE8F5E9)
     val statusCompleteTextColor = Color(0xFF4CAF50)
-
-    val pinkPrimary = Color(0xFFE91E63)
-    val pinkLight = Color(0xFFF8BBD0)
-    val pinkDark = Color(0xFFC2185B)
+    val uploadToApiButtonColor = Color(0xFFFFA000) // Warna baru untuk tombol upload ke API
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -137,7 +132,8 @@ fun ProjectScreen(
                         value = projectName,
                         onValueChange = { projectName = it },
                         modifier = Modifier.fillMaxWidth(),
-                        readOnly = isCurrentProjectFromApi // Nama proyek dari API tidak bisa diubah
+                        // Nama proyek dari API TIDAK lagi readOnly, karena bisa diupdate
+                        // readOnly = isCurrentProjectFromApi
                     )
                     Spacer(Modifier.height(16.dp))
 
@@ -150,7 +146,7 @@ fun ProjectScreen(
                         value = description,
                         onValueChange = { description = it },
                         modifier = Modifier.fillMaxWidth(),
-                        readOnly = isCurrentProjectFromApi
+                        // readOnly = isCurrentProjectFromApi
                     )
                     Spacer(Modifier.height(16.dp))
 
@@ -163,7 +159,7 @@ fun ProjectScreen(
                         value = location,
                         onValueChange = { location = it },
                         modifier = Modifier.fillMaxWidth(),
-                        readOnly = isCurrentProjectFromApi
+                        // readOnly = isCurrentProjectFromApi
                     )
                     Spacer(Modifier.height(16.dp))
 
@@ -176,7 +172,7 @@ fun ProjectScreen(
                         value = supervisor,
                         onValueChange = { supervisor = it },
                         modifier = Modifier.fillMaxWidth(),
-                        readOnly = isCurrentProjectFromApi
+                        // readOnly = isCurrentProjectFromApi
                     )
                     Spacer(Modifier.height(16.dp))
 
@@ -196,12 +192,10 @@ fun ProjectScreen(
                                 readOnly = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable(enabled = !isCurrentProjectFromApi) { showStartDatePicker = true },
+                                    .clickable { showStartDatePicker = true }, // Selalu bisa diklik
                                 trailingIcon = {
-                                    if (!isCurrentProjectFromApi) {
-                                        IconButton(onClick = { showStartDatePicker = true }) {
-                                            Icon(Icons.Default.DateRange, contentDescription = "Pilih Tanggal Mulai")
-                                        }
+                                    IconButton(onClick = { showStartDatePicker = true }) {
+                                        Icon(Icons.Default.DateRange, contentDescription = "Pilih Tanggal Mulai")
                                     }
                                 }
                             )
@@ -219,12 +213,10 @@ fun ProjectScreen(
                                 readOnly = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable(enabled = !isCurrentProjectFromApi) { showEndDatePicker = true },
+                                    .clickable { showEndDatePicker = true }, // Selalu bisa diklik
                                 trailingIcon = {
-                                    if (!isCurrentProjectFromApi) {
-                                        IconButton(onClick = { showEndDatePicker = true }) {
-                                            Icon(Icons.Default.DateRange, contentDescription = "Pilih Tanggal Berakhir")
-                                        }
+                                    IconButton(onClick = { showEndDatePicker = true }) {
+                                        Icon(Icons.Default.DateRange, contentDescription = "Pilih Tanggal Berakhir")
                                     }
                                 }
                             )
@@ -242,10 +234,12 @@ fun ProjectScreen(
                         onStatusSelected = { status = it },
                         statusOptions = statusOptions,
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isCurrentProjectFromApi // Status proyek dari API tidak bisa diubah
+                        // Status proyek dari API TIDAK lagi readOnly
+                        // enabled = !isCurrentProjectFromApi
                     )
                     Spacer(Modifier.height(32.dp))
 
+                    // Tombol Aksi
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceAround,
@@ -261,62 +255,115 @@ fun ProjectScreen(
                             modifier = Modifier
                                 .height(50.dp)
                                 .weight(1f)
-                                .padding(horizontal = 8.dp)
+                                .padding(horizontal = 4.dp) // Sesuaikan padding
                         ) {
                             Text("Kembali", color = Color.White)
                         }
-                        // Tombol Simpan/Perbarui hanya muncul jika bukan proyek dari API atau jika proyek baru
-                        if (!isCurrentProjectFromApi || (projectId == null || projectId == 0)) {
-                            Button(
-                                onClick = {
-                                    if (projectName.isNotBlank()) {
-                                        val project = Project(
-                                            id = projectId ?: 0,
-                                            projectName = projectName,
-                                            description = description,
-                                            location = location,
-                                            clientName = supervisor,
-                                            startDate = startDate,
-                                            endDate = endDate,
-                                            status = status,
-                                            createdBy = "Admin", // Anda bisa mengubah ini sesuai kebutuhan
-                                            isFromApi = false // Selalu false untuk proyek lokal yang disimpan/diperbarui di sini
-                                        )
 
+                        // Logika tombol "Simpan/Perbarui"
+                        Button(
+                            onClick = {
+                                if (projectName.isNotBlank()) {
+                                    val project = Project(
+                                        id = projectId ?: 0,
+                                        projectName = projectName,
+                                        description = description,
+                                        location = location,
+                                        clientName = supervisor,
+                                        startDate = startDate,
+                                        endDate = endDate,
+                                        status = status,
+                                        createdBy = "Admin",
+                                        // isFromApi sekarang diatur berdasarkan apakah proyek ini aslinya dari API atau tidak
+                                        isFromApi = isCurrentProjectFromApi
+                                    )
+
+                                    if (isCurrentProjectFromApi) {
+                                        // Jika proyek dari API, update ke API
+                                        projectViewModel.updateProjectInApi(project)
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("Proyek API sedang diperbarui...")
+                                        }
+                                    } else {
+                                        // Jika proyek lokal (atau baru), tambahkan/perbarui ke Room
                                         if (projectId == null || projectId == 0) {
-                                            // Jika projectId null atau 0, ini adalah proyek baru
-                                            projectViewModel.addLocalProject(project) // Tambah ke Room
+                                            projectViewModel.addLocalProject(project)
                                             coroutineScope.launch {
                                                 snackbarHostState.showSnackbar("Proyek lokal baru berhasil ditambahkan!")
                                             }
                                         } else {
-                                            // Jika projectId ada, ini adalah pembaruan
-                                            projectViewModel.updateLocalProject(project) // Perbarui di Room
+                                            projectViewModel.updateLocalProject(project)
                                             coroutineScope.launch {
                                                 snackbarHostState.showSnackbar("Proyek lokal berhasil diperbarui!")
                                             }
                                         }
-                                        resetForm()
-                                        showForm = false
-                                    } else {
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("Nama proyek tidak boleh kosong!")
-                                        }
                                     }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = saveChangesButtonColor),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .height(50.dp)
-                                    .weight(1f)
-                                    .padding(horizontal = 8.dp)
-                            ) {
-                                Text(if (projectId == null || projectId == 0) "Simpan Proyek Baru" else "Perbarui Proyek Lokal", color = Color.White)
-                            }
+                                    resetForm()
+                                    showForm = false
+                                } else {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Nama proyek tidak boleh kosong!")
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = saveChangesButtonColor),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .height(50.dp)
+                                .weight(1f)
+                                .padding(horizontal = 4.dp) // Sesuaikan padding
+                        ) {
+                            Text(
+                                if (isCurrentProjectFromApi) "Perbarui Proyek API"
+                                else if (projectId == null || projectId == 0) "Simpan Proyek Lokal Baru"
+                                else "Perbarui Proyek Lokal",
+                                color = Color.White
+                            )
                         }
                     }
 
-                    if (showStartDatePicker && !isCurrentProjectFromApi) {
+                    // Tambahkan tombol untuk mengupload proyek lokal ke API
+                    if (projectId != null && projectId != 0 && !isCurrentProjectFromApi) { // Hanya untuk proyek lokal yang sudah ada
+                        Spacer(Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                if (projectName.isNotBlank()) {
+                                    val projectToUpload = Project(
+                                        id = 0, // ID harus 0 untuk POST ke API (API akan menghasilkan ID baru)
+                                        projectName = projectName,
+                                        description = description,
+                                        location = location,
+                                        clientName = supervisor,
+                                        startDate = startDate,
+                                        endDate = endDate,
+                                        status = status,
+                                        createdBy = "Admin",
+                                        isFromApi = false // Ini adalah proyek lokal yang diupload
+                                    )
+                                    projectViewModel.addProjectToApi(projectToUpload) // Panggil addProjectToApi
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Proyek lokal sedang diunggah ke API...")
+                                    }
+                                    resetForm()
+                                    showForm = false
+                                } else {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Nama proyek tidak boleh kosong untuk diunggah!")
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = uploadToApiButtonColor),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                        ) {
+                            Text("Unggah Proyek ke API", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+
+                    if (showStartDatePicker) { // Tidak perlu lagi cek isCurrentProjectFromApi di sini
                         CustomDatePickerDialog(
                             onDismissRequest = { showStartDatePicker = false },
                             onDateSelected = { date ->
@@ -326,7 +373,7 @@ fun ProjectScreen(
                             initialDate = startDate
                         )
                     }
-                    if (showEndDatePicker && !isCurrentProjectFromApi) {
+                    if (showEndDatePicker) { // Tidak perlu lagi cek isCurrentProjectFromApi di sini
                         CustomDatePickerDialog(
                             onDismissRequest = { showEndDatePicker = false },
                             onDateSelected = { date ->
@@ -355,22 +402,19 @@ fun ProjectScreen(
                         startDate = project.startDate.orEmpty()
                         endDate = project.endDate.orEmpty()
                         status = project.status.orEmpty()
-                        isCurrentProjectFromApi = project.isFromApi
+                        isCurrentProjectFromApi = project.isFromApi // Tetapkan nilai ini
                         showForm = true
                     },
                     onDelete = { project ->
                         coroutineScope.launch {
                             if (project.isFromApi) {
-                                // Memanggil fungsi delete API melalui ViewModel
                                 projectViewModel.deleteProjectFromApi(project)
                                 snackbarHostState.showSnackbar("Proyek API sedang dihapus...")
-                                // ViewModel akan me-refresh apiProjects setelah berhasil
                             } else {
-                                // Memanggil fungsi delete lokal melalui ViewModel
                                 projectViewModel.deleteLocalProject(project)
                                 snackbarHostState.showSnackbar("Proyek lokal berhasil dihapus!")
                             }
-                            if (projectId == project.id) resetForm() // Reset form jika proyek yang sedang diedit dihapus
+                            if (projectId == project.id) resetForm()
                         }
                     },
                     editButtonColor = editButtonColor,
@@ -408,13 +452,14 @@ fun ProjectScreen(
 }
 
 // ... (CustomInputField, StatusDropdown, ProjectTable, TableCell, CustomDatePickerDialog tetap sama)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomInputField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    readOnly: Boolean = false,
+    readOnly: Boolean = false, // Tetap ada readOnly, tapi tidak lagi dipaksakan oleh isCurrentProjectFromApi di luar
     singleLine: Boolean = true,
     maxLines: Int = 1,
     trailingIcon: @Composable (() -> Unit)? = null
@@ -422,7 +467,7 @@ fun CustomInputField(
     TextField(
         value = value,
         onValueChange = onValueChange,
-        readOnly = readOnly,
+        readOnly = readOnly, // Digunakan jika ingin membuat field tertentu read-only berdasarkan kondisi lain
         singleLine = singleLine,
         maxLines = maxLines,
         modifier = modifier
@@ -454,7 +499,7 @@ fun StatusDropdown(
     onStatusSelected: (String) -> Unit,
     statusOptions: List<String>,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true // Tetap ada enabled, tapi tidak lagi dipaksakan oleh isCurrentProjectFromApi
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -467,7 +512,7 @@ fun StatusDropdown(
             value = selectedStatus,
             onValueChange = {},
             readOnly = true,
-            enabled = enabled,
+            enabled = enabled, // Digunakan jika ingin membuat dropdown read-only berdasarkan kondisi lain
             modifier = Modifier
                 .menuAnchor()
                 .fillMaxWidth()
@@ -574,9 +619,9 @@ fun ProjectTable(
                     TableCell(project.projectName, 120.dp)
                     TableCell(if (project.isFromApi) "API" else "Lokal", 80.dp)
                     TableCell(project.clientName.orEmpty().ifBlank { "-" }, 120.dp)
-                    TableCell(project.location.orEmpty().ifBlank{ "-" }, 100.dp)
+                    TableCell(project.location.orEmpty().ifBlank { "-" }, 100.dp)
                     TableCell(project.startDate.orEmpty().ifBlank { "-" }, 120.dp)
-                    TableCell(project.endDate.orEmpty().ifBlank{ "-" }, 120.dp)
+                    TableCell(project.endDate.orEmpty().ifBlank { "-" }, 120.dp)
                     Box(
                         modifier = Modifier
                             .width(100.dp)
@@ -614,12 +659,12 @@ fun ProjectTable(
                         Button(
                             onClick = { onEdit(project) },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (project.isFromApi) Color.Gray else editButtonColor // Proyek API tidak bisa diedit via form lokal
+                                containerColor = editButtonColor // Tombol edit selalu aktif
                             ),
                             shape = RoundedCornerShape(4.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                             modifier = Modifier.height(28.dp),
-                            enabled = !project.isFromApi // Disable tombol edit untuk proyek dari API
+                            enabled = true // Tombol edit selalu aktif sekarang
                         ) {
                             Text("Edit", color = Color.White, style = MaterialTheme.typography.labelSmall)
                         }
@@ -631,7 +676,7 @@ fun ProjectTable(
                             shape = RoundedCornerShape(4.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                             modifier = Modifier.height(28.dp),
-                            enabled = true // Tombol delete selalu aktif (logika hapus ada di screen)
+                            enabled = true // Tombol delete selalu aktif
                         ) {
                             Text("Hapus", color = Color.White, style = MaterialTheme.typography.labelSmall)
                         }
@@ -654,7 +699,6 @@ fun TableCell(text: String, width: Dp) {
         style = MaterialTheme.typography.bodyMedium
     )
 }
-
 
 @Composable
 fun CustomDatePickerDialog(

@@ -81,7 +81,7 @@ class PdfGenerator(private val context: Context) {
         dataEntry?.let {
             paint.textSize = 16f
             paint.isFakeBoldText = true
-            canvas.drawText("1. Problem Framing / Data Entry", xMargin, yPos, paint)
+            canvas.drawText("1. Problem Framing", xMargin, yPos, paint)
             yPos += 25f
 
             paint.textSize = 12f
@@ -113,19 +113,19 @@ class PdfGenerator(private val context: Context) {
 
             paint.textSize = 12f
             paint.isFakeBoldText = false
-            canvas.drawText("Source Data: ${it.sourceData}", xMargin, yPos, paint)
+            canvas.drawText("Source Data: ${it.dataSourceDescription ?: "N/A"}", xMargin, yPos, paint)
             yPos += lineHeight
-            canvas.drawText("Transformation Steps: ${it.transformationSteps}", xMargin, yPos, paint)
+            canvas.drawText("Transformation Steps: ${it.processingStepsSummary ?: "N/A"}", xMargin, yPos, paint)
             yPos += lineHeight
-            canvas.drawText("Feature Engineering: ${it.featureEngineering}", xMargin, yPos, paint)
+            canvas.drawText("Feature Engineering: ${it.featureEngineeringDetails ?: "N/A"}", xMargin, yPos, paint)
             yPos += lineHeight
-            canvas.drawText("Processed File Location: ${it.processedFileLocation}", xMargin, yPos, paint)
+            canvas.drawText("Processed File Location: ${it.processedDataLocation ?: "N/A"}", xMargin, yPos, paint)
             yPos += lineHeight
-            canvas.drawText("Processed File Name: ${it.processedFileName}", xMargin, yPos, paint)
+            canvas.drawText("Processed File: ${it.processedFile ?: "N/A"}", xMargin, yPos, paint) // Perhatikan ini sekarang 'processedFile'
             yPos += lineHeight
-            canvas.drawText("Processing Status: ${it.processingStatus}", xMargin, yPos, paint)
+            canvas.drawText("Processing Status: ${it.processingStatus ?: "N/A"}", xMargin, yPos, paint)
             yPos += lineHeight
-            canvas.drawText("Created At (Data Processing): ${it.createdAt}", xMargin, yPos, paint)
+            canvas.drawText("Created At (Data Processing): ${it.createdAt ?: "N/A"}", xMargin, yPos, paint)
             yPos += sectionSpacing
         }
 

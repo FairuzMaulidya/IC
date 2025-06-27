@@ -22,6 +22,8 @@ import androidx.navigation.NavHostController
 import com.example.test.viewmodel.DataProcessingViewModel
 import com.example.test.viewmodel.ProjectViewModel
 import com.example.test.data.DataProcessing
+import com.example.test.data.DataProcessingRequest
+import com.example.test.data.Project
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -43,7 +45,9 @@ fun DataProcessingScreen(
     projectViewModel: ProjectViewModel = viewModel(
         factory = ProjectViewModel.Factory(LocalContext.current.applicationContext as Application)
     ),
-    dataProcessingViewModel: DataProcessingViewModel = viewModel()
+    dataProcessingViewModel: DataProcessingViewModel = viewModel(
+        factory = DataProcessingViewModel.Factory(LocalContext.current.applicationContext as Application)
+    )
 ) {
     val localProjects by projectViewModel.allLocalProjects.observeAsState(emptyList())
     val apiProjects by projectViewModel.apiProjects.observeAsState(emptyList())
@@ -83,11 +87,13 @@ fun DataProcessingScreen(
         if (showForm) {
             DataProcessingForm(
                 allProjects = projects,
-                onSubmit = { data ->
-                    if (selectedDataForEdit != null) {
-                        dataProcessingViewModel.update(data.copy(id = selectedDataForEdit!!.id))
+                // MODIFIKASI: onSubmit sekarang menerima Uri? untuk file
+                onSubmit = { dataToProcess, isEdit, fileUri ->
+                    if (isEdit && selectedDataForEdit != null) {
+                        dataProcessingViewModel.updateDataProcessing(selectedDataForEdit!!.id, dataToProcess, fileUri)
                     } else {
-                        dataProcessingViewModel.insert(data)
+                        // Saat membuat data baru, kita juga akan mengirimkan fileUri
+                        dataProcessingViewModel.createDataProcessing(dataToProcess, fileUri)
                     }
                     showForm = false
                     selectedDataForEdit = null
@@ -147,10 +153,10 @@ fun DataProcessingScreen(
                             ) {
                                 Text((index + 1).toString(), modifier = Modifier.width(40.dp))
                                 Text(data.projectName, modifier = Modifier.width(100.dp))
-                                Text(data.sourceData, modifier = Modifier.width(150.dp))
-                                Text(data.transformationSteps, modifier = Modifier.width(150.dp))
-                                Text(data.processedFileLocation, modifier = Modifier.width(120.dp))
-                                Text(data.processingStatus, modifier = Modifier.width(120.dp))
+                                Text(data.dataSourceDescription ?: "", modifier = Modifier.width(150.dp))
+                                Text(data.processingStepsSummary ?: "", modifier = Modifier.width(150.dp))
+                                Text(data.processedDataLocation ?: "", modifier = Modifier.width(120.dp))
+                                Text(data.processingStatus ?: "", modifier = Modifier.width(120.dp))
 
                                 Row(
                                     modifier = Modifier.width(260.dp),
@@ -235,14 +241,14 @@ fun DataProcessingScreen(
                         )
 
                         @Composable
-                        fun DetailViewField(label: String, value: String) {
+                        fun DetailViewField(label: String, value: String?) {
                             Column(modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)) {
                                 Text(label, fontSize = 14.sp)
                                 Spacer(Modifier.height(4.dp))
                                 OutlinedTextField(
-                                    value = value,
+                                    value = value ?: "",
                                     onValueChange = {},
                                     readOnly = true,
                                     modifier = Modifier.fillMaxWidth(),
@@ -261,12 +267,14 @@ fun DataProcessingScreen(
                             }
                         }
 
-                        DetailViewField("Sumber Data", data.sourceData)
-                        DetailViewField("Transformasi Data", data.transformationSteps)
-                        DetailViewField("Rekayasa Fitur", data.featureEngineering)
-                        DetailViewField("Lokasi File Diproses", data.processedFileLocation)
-                        DetailViewField("Nama File Data Diproses", data.processedFileName)
+                        DetailViewField("Sumber Data", data.dataSourceDescription)
+                        DetailViewField("Transformasi Data", data.processingStepsSummary)
+                        DetailViewField("Rekayasa Fitur", data.featureEngineeringDetails)
+                        DetailViewField("Lokasi File Diproses", data.processedDataLocation)
+                        DetailViewField("Nama File Data Diproses", data.processedFile)
                         DetailViewField("Status Pemrosesan", data.processingStatus)
+                        DetailViewField("Dibuat Pada", data.createdAt)
+                        DetailViewField("Diperbarui Pada", data.updatedAt)
                     }
                 }
             }
@@ -274,9 +282,9 @@ fun DataProcessingScreen(
 
         if (showDeleteConfirmationDialog && dataToDelete != null) {
             DeleteConfirmationDialog(
-                entry = dataToDelete!!, // Use the correct type here. Assuming DataProcessing.
+                entry = dataToDelete!!,
                 onDeleteConfirm = {
-                    dataToDelete?.let { dataProcessingViewModel.delete(it) }
+                    dataToDelete?.let { dataProcessingViewModel.deleteDataProcessing(it) }
                     showDeleteConfirmationDialog = false
                     dataToDelete = null
                 },
@@ -292,18 +300,32 @@ fun DataProcessingScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DataProcessingForm(
-    allProjects: List<com.example.test.data.Project>,
-    onSubmit: (DataProcessing) -> Unit,
+    allProjects: List<Project>,
+    // MODIFIKASI: onSubmit sekarang menerima Uri? untuk file
+    onSubmit: (DataProcessing, Boolean, Uri?) -> Unit,
     onCancel: () -> Unit,
     initialData: DataProcessing? = null
 ) {
-    var selectedProject by remember { mutableStateOf(initialData?.projectName ?: "") }
+    var selectedProject by remember { mutableStateOf(initialData?.let {
+        allProjects.find { p -> p.id == it.projectId }
+    } ?: allProjects.firstOrNull()) }
     var expanded by remember { mutableStateOf(false) }
-    var sourceData by remember { mutableStateOf(initialData?.sourceData ?: "") }
-    var transformationSteps by remember { mutableStateOf(initialData?.transformationSteps ?: "") }
-    var featureEngineering by remember { mutableStateOf(initialData?.featureEngineering ?: "") }
-    var processedFileLocation by remember { mutableStateOf(initialData?.processedFileLocation ?: "") }
-    var processedFileName by remember { mutableStateOf(initialData?.processedFileName ?: "") }
+    var sourceData by remember { mutableStateOf(initialData?.dataSourceDescription ?: "") }
+    var transformationSteps by remember { mutableStateOf(initialData?.processingStepsSummary ?: "") }
+    var featureEngineering by remember { mutableStateOf(initialData?.featureEngineeringDetails ?: "") }
+
+    // Inisialisasi untuk menampilkan URL dari API jika ada
+    var processedFileLocation by remember {
+        mutableStateOf(initialData?.processedDataLocation.takeIf { !it.isNullOrEmpty() } ?: initialData?.processedFile ?: "")
+    }
+    var processedFileName by remember {
+        mutableStateOf(initialData?.processedFile ?: "")
+    }
+
+    // State untuk menyimpan URI file yang dipilih pengguna
+    var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
+
+
     var processingStatus by remember { mutableStateOf(initialData?.processingStatus ?: "") }
 
     val context = LocalContext.current
@@ -312,9 +334,10 @@ fun DataProcessingForm(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
+            selectedFileUri = it // Simpan URI yang dipilih
             val fileName = getFileName(context, it)
             processedFileName = fileName ?: it.lastPathSegment ?: "Unknown File"
-            processedFileLocation = it.toString()
+            processedFileLocation = it.toString() // Tampilkan URI lokal di TextField
         }
     }
 
@@ -339,7 +362,7 @@ fun DataProcessingForm(
             onExpandedChange = { expanded = !expanded }
         ) {
             OutlinedTextField(
-                value = selectedProject,
+                value = selectedProject?.projectName ?: "Pilih Proyek",
                 onValueChange = {},
                 readOnly = true,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
@@ -355,7 +378,7 @@ fun DataProcessingForm(
                     DropdownMenuItem(
                         text = { Text(project.projectName) },
                         onClick = {
-                            selectedProject = project.projectName
+                            selectedProject = project
                             expanded = false
                         }
                     )
@@ -383,7 +406,7 @@ fun DataProcessingForm(
 
         Spacer(Modifier.height(12.dp))
 
-        Text(text = "Lokasi File Diproses", style = MaterialTheme.typography.bodyLarge)
+        Text(text = "Lokasi File Diproses (URI Lokal / URL API)", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(4.dp))
         OutlinedTextField(
             value = processedFileLocation,
@@ -394,7 +417,7 @@ fun DataProcessingForm(
 
         Spacer(Modifier.height(12.dp))
 
-        Text(text = "File Data Diproses", style = MaterialTheme.typography.bodyLarge)
+        Text(text = "Nama File Data Diproses (atau URL)", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(4.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -407,12 +430,11 @@ fun DataProcessingForm(
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(8.dp))
-            // Replaced Button with IconButton
             IconButton(
                 onClick = { pickFileLauncher.launch(arrayOf("*/*")) },
                 modifier = Modifier
-                    .size(56.dp) // Maintain a similar size to the text field height
-                    .background(Color(0xFF007bff), shape = MaterialTheme.shapes.small) // Apply background and shape
+                    .size(56.dp)
+                    .background(Color(0xFF007bff), shape = MaterialTheme.shapes.small)
             ) {
                 Icon(
                     imageVector = Icons.Default.FileUpload,
@@ -443,19 +465,23 @@ fun DataProcessingForm(
             }
             Button(
                 onClick = {
-                    val now = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(Date())
-                    onSubmit(
-                        DataProcessing(
-                            projectName = selectedProject,
-                            sourceData = sourceData,
-                            transformationSteps = transformationSteps,
-                            featureEngineering = featureEngineering,
-                            processedFileLocation = processedFileLocation,
-                            processedFileName = processedFileName,
-                            processingStatus = processingStatus,
-                            createdAt = initialData?.createdAt ?: now
-                        )
+                    val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", Locale.getDefault()).format(Date())
+                    val data = DataProcessing(
+                        id = initialData?.id ?: 0,
+                        projectName = selectedProject?.projectName ?: "",
+                        projectId = selectedProject?.id ?: 0,
+                        dataSourceDescription = sourceData,
+                        processingStepsSummary = transformationSteps,
+                        featureEngineeringDetails = featureEngineering,
+                        processedDataLocation = processedFileLocation,
+                        processedFile = processedFileName, // Ini akan menjadi nama file lokal/URL dari API
+                        processingStatus = processingStatus,
+                        createdAt = initialData?.createdAt ?: now,
+                        updatedAt = now,
+                        processedBy = initialData?.processedBy
                     )
+                    // Panggil onSubmit dengan data dan URI file yang dipilih
+                    onSubmit(data, initialData != null, selectedFileUri)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF28a745)),
                 modifier = Modifier
@@ -467,6 +493,7 @@ fun DataProcessingForm(
         }
     }
 }
+
 
 // Fungsi helper untuk mendapatkan nama file dari Uri
 fun getFileName(context: Context, uri: Uri): String? {
@@ -484,7 +511,7 @@ fun getFileName(context: Context, uri: Uri): String? {
 
 @Composable
 fun DeleteConfirmationDialog(
-    entry: DataProcessing, // Changed type from DataEntry to DataProcessing
+    entry: DataProcessing,
     onDeleteConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -506,7 +533,7 @@ fun DeleteConfirmationDialog(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = entry.projectName, // Access projectName from DataProcessing
+                    text = entry.projectName,
                     color = Color.Gray,
                     fontWeight = FontWeight.Medium
                 )

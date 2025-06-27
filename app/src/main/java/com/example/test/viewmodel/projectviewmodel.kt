@@ -160,8 +160,6 @@ class ProjectViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    // --- CRUD untuk Project (yang ini berinteraksi dengan API) ---
-    // Dipanggil untuk menambah/mengupdate/menghapus proyek di API & cache ke lokal
     fun addProjectToApi(project: Project) { // Nama diubah untuk lebih jelas
         viewModelScope.launch {
             _isLoading.value = true

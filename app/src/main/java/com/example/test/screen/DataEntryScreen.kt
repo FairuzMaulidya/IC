@@ -1,3 +1,4 @@
+// File: app/src/main/test/screen/DataEntryScreen.kt
 package com.example.test.screen
 
 import android.annotation.SuppressLint
@@ -12,9 +13,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.DateRange // Untuk ikon DatePicker
-import androidx.compose.material.icons.filled.Search // Untuk ikon Search
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.example.test.data.DataEntry
-import com.example.test.data.Project
+import com.example.test.data.Project // Tetap import Project karena digunakan untuk projectList
 import com.example.test.viewmodel.DataEntryViewModel
 import com.example.test.viewmodel.ProjectViewModel
 import java.text.SimpleDateFormat
@@ -41,24 +41,45 @@ fun DataEntryScreen(
     viewModel: DataEntryViewModel = viewModel(),
     projectViewModel: ProjectViewModel = viewModel()
 ) {
-    val allEntries by viewModel.allEntries.collectAsState(initial = emptyList())
+    // Menggunakan observeAsState karena allEntries di ViewModel adalah LiveData
+    val allEntries by viewModel.allEntries.observeAsState(initial = emptyList())
     val localProjects by projectViewModel.allLocalProjects.observeAsState(emptyList())
     val apiProjects by projectViewModel.apiProjects.observeAsState(emptyList())
+
+    // Gabungkan dan urutkan daftar proyek untuk dropdown di form
     val projectList = remember(localProjects, apiProjects) {
-        (localProjects + apiProjects).sortedBy { it.projectName }
+        (localProjects + apiProjects).distinctBy { it.id }.sortedBy { it.projectName.orEmpty() }
     }
 
     val projectNames = remember(projectList) {
-        projectList.map { it.projectName }
+        projectList.map { it.projectName.orEmpty() }
     }
 
-    var selectedProject by remember { mutableStateOf<Project?>(null) }
-    val entryState = remember { mutableStateOf(DataEntry()) }
+    // `selectedProject` tidak lagi digunakan untuk mengontrol tampilan utama
+    // tetapi bisa digunakan untuk menyimpan proyek yang sedang diedit/dilihat jika diperlukan
+    // Untuk tujuan ini, saya akan menghapus penggunaannya untuk kontrol tampilan utama.
+
+    // Inisialisasi DataEntry dengan nilai default yang aman dan nullable yang sesuai
+    val entryState = remember { mutableStateOf(DataEntry(
+        projectName = null,
+        projectId = null,
+        problemDescription = null,
+        target = null,
+        stock = null,
+        inflow = null,
+        outflow = null,
+        dataNeeded = null,
+        framedBy = null,
+        framedById = null,
+        dateCreated = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()),
+        createdAt = null,
+        updatedAt = null
+    )) }
     val showForm = remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     val showDetail = remember { mutableStateOf(false) }
     val showDeleteConfirmation = remember { mutableStateOf(false) }
-    val selectedEntry = remember { mutableStateOf<DataEntry?>(null) }
+    val selectedEntry = remember { mutableStateOf<DataEntry?>(null) } // Digunakan untuk detail/delete
 
     val verticalScrollState = rememberScrollState()
 
@@ -66,154 +87,173 @@ fun DataEntryScreen(
         Modifier
             .fillMaxSize()
             .padding(16.dp)
-            .verticalScroll(verticalScrollState) // Main screen column is scrollable
+            .verticalScroll(verticalScrollState)
     ) {
-        if (selectedProject == null) {
-            // Display Project Table when no project is selected
-            Text("Pilih Proyek untuk Problem Framing", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(16.dp))
-            ProjectTable(projects = projectList, onStart = {
-                selectedProject = it
-                entryState.value = DataEntry(
-                    projectName = it.projectName,
-                    dateCreated = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
-                )
-                showForm.value = true // Automatically show form for new entry after project selection
-            })
-        } else {
-            // Content after a project is selected
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Proyek: ${selectedProject!!.projectName}", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = {
-                    selectedProject = null
+        // Langsung tampilkan daftar problem framing atau form
+        if (showForm.value) {
+            DataEntryForm(
+                entry = entryState.value,
+                onEntryChange = { field, value ->
+                    // Ketika projectName berubah, coba cari projectId yang sesuai dari projectList
+                    if (field == "projectName") {
+                        val project = projectList.find { it.projectName == value }
+                        entryState.value = entryState.value.copy(
+                            projectName = value,
+                            projectId = project?.id // Set projectId berdasarkan nama proyek yang dipilih
+                        )
+                    } else {
+                        entryState.value = entryState.value.copyField(field, value)
+                    }
+                },
+                onSave = {
+                    // Pastikan framedById tetap ada saat menyimpan
+                    val entryToSave = entryState.value.copy(
+                        framedById = entryState.value.framedById ?: 1 // Gunakan yang sudah ada atau default ke 1
+                    )
+
+                    if (entryToSave.id == 0) {
+                        viewModel.insertEntry(entryToSave)
+                    } else {
+                        viewModel.updateEntry(entryToSave)
+                    }
                     showForm.value = false
-                    entryState.value = DataEntry() // Reset entry state
-                }) {
-                    Text("Kembali Pilih Proyek")
+                    // Reset entryState untuk form kosong berikutnya
+                    entryState.value = DataEntry(
+                        projectName = null, // Kembali ke null untuk form baru
+                        projectId = null,   // Kembali ke null untuk form baru
+                        problemDescription = null,
+                        target = null,
+                        stock = null,
+                        inflow = null,
+                        outflow = null,
+                        dataNeeded = null,
+                        framedBy = "Default User", // Sesuaikan
+                        framedById = 1, // Sesuaikan
+                        dateCreated = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()),
+                        createdAt = null,
+                        updatedAt = null
+                    )
+                },
+                onClose = { showForm.value = false },
+                projectList = projectNames
+            )
+        } else {
+            // Jika form tidak ditampilkan, tampilkan daftar problem framing dan tombol tambah
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Daftar Problem Framing",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = {
+                        // Inisialisasi DataEntry baru untuk form kosong
+                        entryState.value = DataEntry(
+                            projectName = null, // Mulai dengan proyek null, akan dipilih di form
+                            projectId = null,
+                            problemDescription = null,
+                            target = null,
+                            stock = null,
+                            inflow = null,
+                            outflow = null,
+                            dataNeeded = null,
+                            framedBy = "Default User", // Sesuaikan
+                            framedById = 1, // Sesuaikan
+                            dateCreated = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()),
+                            createdAt = null,
+                            updatedAt = null
+                        )
+                        showForm.value = true
+                    },
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                    modifier = Modifier.size(48.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(
+                        text = "+",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
             Spacer(Modifier.height(8.dp))
 
-            if (showForm.value) {
-                // Display Data Entry Form when showForm is true
-                DataEntryForm(
-                    entry = entryState.value,
-                    onEntryChange = { field, value ->
-                        entryState.value = entryState.value.copyField(field, value)
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text("Searching...", color = Color.Gray) },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = "Search Icon")
+                },
+                modifier = Modifier.fillMaxWidth(), // Menggunakan fillMaxWidth()
+                singleLine = true,
+                shape = RoundedCornerShape(24.dp)
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            // Filter semua entri berdasarkan query saja
+            val filteredEntries = allEntries.filter {
+                query.isBlank() ||
+                        (it.projectName?.contains(query, true) == true) ||
+                        (it.problemDescription?.contains(query, true) == true) ||
+                        (it.target?.contains(query, true) == true) ||
+                        (it.dataNeeded?.contains(query, true) == true)
+            }
+            HorizontalScrollableTable(
+                data = filteredEntries,
+                onEdit = { entryToEdit ->
+                    entryState.value = entryToEdit // Set entryState dengan data yang akan diedit
+                    showForm.value = true
+                },
+                onDelete = {
+                    selectedEntry.value = it
+                    showDeleteConfirmation.value = true
+                },
+                onView = {
+                    selectedEntry.value = it
+                    showDetail.value = true
+                }
+            )
+
+            if (showDetail.value && selectedEntry.value != null) {
+                EntryDetailView(entry = selectedEntry.value!!, onClose = { showDetail.value = false })
+            }
+            if (showDeleteConfirmation.value && selectedEntry.value != null) {
+                DeleteConfirmationDialog(
+                    entry = selectedEntry.value!!,
+                    onDeleteConfirm = {
+                        viewModel.deleteEntry(selectedEntry.value!!)
+                        showDeleteConfirmation.value = false
                     },
-                    onSave = {
-                        if (entryState.value.id == 0) viewModel.insertEntry(entryState.value)
-                        else viewModel.updateEntry(entryState.value)
-                        showForm.value = false
-                        if (entryState.value.id == 0) { // Reset for new entry after save
-                            entryState.value = DataEntry(
-                                projectName = selectedProject!!.projectName,
-                                dateCreated = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
-                            )
-                        }
-                    },
-                    onClose = { showForm.value = false },
-                    // Hapus onDelete dari DataEntryForm karena tombol delete dipindahkan ke tabel
-                    projectList = projectNames
+                    onDismiss = { showDeleteConfirmation.value = false }
                 )
-            } else {
-                // Display "Tambah Data Entry" button and the table when form is not shown
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Button(
-                        onClick = {
-                            entryState.value = DataEntry(
-                                projectName = selectedProject!!.projectName,
-                                dateCreated = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
-                            )
-                            showForm.value = true
-                        },
-                        shape = CircleShape, // Bentuk lingkaran
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)), // Warna hijau
-                        modifier = Modifier.size(48.dp), // Ukuran tombol
-                        contentPadding = PaddingValues(0.dp) // Pastikan tidak ada padding default yang mengganggu
-                    ) {
-                        // Menggunakan Text untuk menampilkan '+'
-                        Text(
-                            text = "+",
-                            color = Color.White,
-                            fontSize = 24.sp, // Ukuran font disesuaikan agar pas di dalam 48.dp
-                            fontWeight = FontWeight.Bold // Ketebalan font untuk visibilitas
-                        )
-                    }
-
-                    Spacer(Modifier.width(8.dp))
-
-                    // Search field (disesuaikan agar mirip gambar)
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        placeholder = { Text("Searching...", color = Color.Gray) }, // Placeholder
-                        leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = "Search Icon")
-                        },
-                        modifier = Modifier.weight(1f), // Mengisi sisa ruang
-                        singleLine = true,
-                        shape = RoundedCornerShape(24.dp) // Bentuk rounded
-                    )
-                }
-
-
-                Spacer(Modifier.height(8.dp))
-
-                val filteredEntries = allEntries.filter {
-                    it.projectName == selectedProject!!.projectName &&
-                            (query.isBlank() || it.problemDescription.contains(query, true) ||
-                                    it.target.contains(query, true) || it.dataNeeded.contains(query, true))
-                }
-                HorizontalScrollableTable(
-                    data = filteredEntries,
-                    onEdit = {
-                        entryState.value = it
-                        showForm.value = true
-                    },
-                    onDelete = {
-                        selectedEntry.value = it
-                        showDeleteConfirmation.value = true
-                    },
-                    onView = {
-                        selectedEntry.value = it
-                        showDetail.value = true
-                    }
-                )
-
-                if (showDetail.value && selectedEntry.value != null) {
-                    EntryDetailView(entry = selectedEntry.value!!, onClose = { showDetail.value = false })
-                }
-                if (showDeleteConfirmation.value && selectedEntry.value != null) {
-                    DeleteConfirmationDialog(
-                        entry = selectedEntry.value!!,
-                        onDeleteConfirm = {
-                            viewModel.deleteEntry(selectedEntry.value!!)
-                            showDeleteConfirmation.value = false
-                        },
-                        onDismiss = { showDeleteConfirmation.value = false }
-                    )
-                }
             }
         }
     }
 }
 
+// ProjectTable telah dihapus sepenuhnya karena tidak lagi digunakan.
+/*
+@Composable
+fun ProjectTable(...) { ... }
+*/
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DataEntryForm(
     entry: DataEntry,
-    onEntryChange: (String, String) -> Unit,
+    onEntryChange: (String, String?) -> Unit,
     onSave: () -> Unit,
     onClose: () -> Unit,
-    // onDelete: () -> Unit, // Hapus parameter onDelete
-    projectList: List<String> // List of project names for dropdown
+    projectList: List<String>
 ) {
     val context = LocalContext.current
     var selectedProjectName by remember(entry.projectName) { mutableStateOf(entry.projectName) }
@@ -242,10 +282,10 @@ fun DataEntryForm(
             Spacer(modifier = Modifier.height(16.dp))
 
             ProjectDropdownField(
-                selectedProject = selectedProjectName,
+                selectedProject = selectedProjectName.orEmpty(),
                 onProjectSelected = { newName ->
                     selectedProjectName = newName
-                    onEntryChange("projectName", newName)
+                    onEntryChange("projectName", newName) // Memicu update projectId di DataEntryScreen
                 },
                 projectList = projectList
             )
@@ -305,7 +345,7 @@ fun DataEntryForm(
             Column(modifier = Modifier.padding(bottom = 12.dp)) {
                 Text("Tanggal Dibuat", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 OutlinedTextField(
-                    value = entry.dateCreated,
+                    value = entry.dateCreated.orEmpty(),
                     onValueChange = { onEntryChange("dateCreated", it) },
                     readOnly = true,
                     modifier = Modifier
@@ -347,60 +387,6 @@ fun DataEntryForm(
 }
 
 @Composable
-fun ProjectTable(
-    projects: List<Project>,
-    onStart: (Project) -> Unit
-) {
-    val scrollState = rememberScrollState()
-
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .horizontalScroll(scrollState)
-    ) {
-        Row(
-            Modifier
-                .background(Color.LightGray)
-                .padding(8.dp)
-        ) {
-            TableCell("No", fontWeight = FontWeight.Bold, modifier = Modifier.width(60.dp))
-            TableCell("Nama Proyek", fontWeight = FontWeight.Bold, modifier = Modifier.width(180.dp))
-            TableCell("Deskripsi", fontWeight = FontWeight.Bold, modifier = Modifier.width(240.dp))
-            TableCell("Lokasi", fontWeight = FontWeight.Bold, modifier = Modifier.width(160.dp))
-            TableCell("Status", fontWeight = FontWeight.Bold, modifier = Modifier.width(120.dp))
-            TableCell("Aksi", fontWeight = FontWeight.Bold, modifier = Modifier.width(180.dp))
-        }
-
-        projects.forEachIndexed { index, project ->
-            Row(
-                Modifier
-                    .padding(8.dp)
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TableCell("${index + 1}", modifier = Modifier.width(60.dp))
-                TableCell(project.projectName, modifier = Modifier.width(180.dp))
-                TableCell(project.description.orEmpty(), modifier = Modifier.width(240.dp))
-                TableCell(project.location.orEmpty(), modifier = Modifier.width(160.dp))
-                TableCell(
-                    project.status.orEmpty(),
-                    modifier = Modifier.width(120.dp),
-                    fontWeight = FontWeight.Medium
-                )
-                TableCell(modifier = Modifier.width(180.dp)) {
-                    Button(
-                        onClick = { onStart(project) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3)) // Blue color
-                    ) {
-                        Text("Mulai Problem Framing")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun HorizontalScrollableTable(
     data: List<DataEntry>,
     onEdit: (DataEntry) -> Unit,
@@ -428,19 +414,16 @@ fun HeaderRow() {
             .fillMaxWidth()
             .background(Color(0xFFE0E0E0))
     ) {
-        // Sesuaikan header agar cocok dengan gambar
         val headers = listOf(
-            "#", // Sesuai gambar
+            "#",
             "Nama Projek",
             "Deskripsi Masalah",
-            "Target", // Diubah dari "Target/Tujuan"
+            "Target",
             "Stock",
             "Inflow",
             "Diframe Oleh",
-            // "Outflow", "Data Diperlukan", "Tanggal Dibuat" dihapus
         )
         headers.forEachIndexed { index, header ->
-            // Sesuaikan lebar kolom agar lebih fleksibel atau sesuai kebutuhan
             val modifier = when (header) {
                 "#" -> Modifier.width(60.dp)
                 "Nama Projek" -> Modifier.width(150.dp)
@@ -449,7 +432,7 @@ fun HeaderRow() {
                 "Stock" -> Modifier.width(100.dp)
                 "Inflow" -> Modifier.width(100.dp)
                 "Diframe Oleh" -> Modifier.width(150.dp)
-                else -> Modifier.width(140.dp) // Default
+                else -> Modifier.width(140.dp)
             }
             TableCell(header, fontWeight = FontWeight.Bold, modifier = modifier)
         }
@@ -474,27 +457,24 @@ fun DataRow(
             .background(backgroundColor)
             .padding(vertical = 8.dp)
     ) {
-        // Sesuaikan data yang ditampilkan agar cocok dengan header baru
         listOf(
-            "${index + 1}", // Untuk kolom #
-            entry.projectName,
-            entry.problemDescription,
-            entry.target,
-            entry.stock,
-            entry.inflow,
-            entry.framedBy,
-            // entry.outflow, entry.dataNeeded, entry.dateCreated dihapus
+            "${index + 1}",
+            entry.projectName.orEmpty(),
+            entry.problemDescription.orEmpty(),
+            entry.target.orEmpty(),
+            entry.stock.orEmpty(),
+            entry.inflow.orEmpty(),
+            entry.framedBy.orEmpty(),
         ).forEachIndexed { i, text ->
-            // Sesuaikan lebar kolom agar lebih fleksibel atau sesuai kebutuhan
             val modifier = when (i) {
-                0 -> Modifier.width(60.dp) // #
-                1 -> Modifier.width(150.dp) // Nama Projek
-                2 -> Modifier.width(200.dp) // Deskripsi Masalah
-                3 -> Modifier.width(150.dp) // Target
-                4 -> Modifier.width(100.dp) // Stock
-                5 -> Modifier.width(100.dp) // Inflow
-                6 -> Modifier.width(150.dp) // Diframe Oleh
-                else -> Modifier.width(140.dp) // Default
+                0 -> Modifier.width(60.dp)
+                1 -> Modifier.width(150.dp)
+                2 -> Modifier.width(200.dp)
+                3 -> Modifier.width(150.dp)
+                4 -> Modifier.width(100.dp)
+                5 -> Modifier.width(100.dp)
+                6 -> Modifier.width(150.dp)
+                else -> Modifier.width(140.dp)
             }
             TableCell(text, modifier = modifier)
         }
@@ -516,8 +496,11 @@ fun DataRow(
 fun EntryDetailView(entry: DataEntry, onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
-        confirmButton = {},
-        dismissButton = {},
+        confirmButton = {
+            TextButton(onClick = onClose) {
+                Text("Close")
+            }
+        },
         title = {
             Text(
                 text = "Detail Problem Framing",
@@ -534,33 +517,31 @@ fun EntryDetailView(entry: DataEntry, onClose: () -> Unit) {
                     .padding(16.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                LabelValueWithGrayBackground("Nama Proyek", entry.projectName)
+                LabelValueWithGrayBackground("Nama Proyek", entry.projectName.orEmpty())
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LabelValueWithGrayBackground("Deskripsi Masalah", entry.problemDescription)
+                LabelValueWithGrayBackground("Deskripsi Masalah", entry.problemDescription.orEmpty())
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LabelValueWithGrayBackground("Target/Tujuan", entry.target)
+                LabelValueWithGrayBackground("Target/Tujuan", entry.target.orEmpty())
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LabelValueWithGrayBackground("Stock", entry.stock)
+                LabelValueWithGrayBackground("Stock", entry.stock.orEmpty())
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LabelValueWithGrayBackground("Inflow", entry.inflow)
+                LabelValueWithGrayBackground("Inflow", entry.inflow.orEmpty())
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LabelValueWithGrayBackground("Outflow", entry.outflow)
+                LabelValueWithGrayBackground("Outflow", entry.outflow.orEmpty())
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LabelValueWithGrayBackground("Data Diperlukan", entry.dataNeeded)
+                LabelValueWithGrayBackground("Data Diperlukan", entry.dataNeeded.orEmpty())
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LabelValueWithGrayBackground("Diframe Oleh", entry.framedBy)
+                LabelValueWithGrayBackground("Diframe Oleh", entry.framedBy.orEmpty())
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LabelValueWithGrayBackground("Tanggal Dibuat", entry.dateCreated)
-                // Spacer(modifier = Modifier.height(8.dp)) // Opsional, tergantung jarak yang diinginkan
-                // Fitur Kunci TELAH DIHAPUS
+                LabelValueWithGrayBackground("Tanggal Dibuat", entry.dateCreated.orEmpty())
             }
         },
         containerColor = Color.White,
@@ -568,128 +549,21 @@ fun EntryDetailView(entry: DataEntry, onClose: () -> Unit) {
     )
 }
 
-@Composable
-fun LabelValueWithGrayBackground(label: String, value: String) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            fontWeight = FontWeight.Normal,
-            fontSize = 14.sp,
-            color = Color.Black,
-            modifier = Modifier.padding(bottom = 2.dp)
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color(0xFFEEEEEE), RoundedCornerShape(4.dp))
-                .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-        ) {
-            Text(
-                text = value.ifEmpty { "-" },
-                fontSize = 16.sp,
-                color = Color.Black
-            )
-        }
-    }
-}
 
 
 @Composable
-fun LabelAndField(label: String, value: String, onValueChange: (String) -> Unit) {
+fun LabelAndField(label: String, value: String?, onValueChange: (String?) -> Unit) {
     Column(modifier = Modifier.padding(bottom = 12.dp)) {
         Text(label, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
+            value = value.orEmpty(),
+            onValueChange = { onValueChange(it) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { if (value.isEmpty()) Text("") }
+            placeholder = { if (value.isNullOrEmpty()) Text("") }
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ProjectDropdownField(
-    selectedProject: String,
-    onProjectSelected: (String) -> Unit,
-    projectList: List<String>
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded },
-    ) {
-        OutlinedTextField(
-            readOnly = true,
-            value = selectedProject,
-            onValueChange = {},
-            label = { Text("Nama Projek") },
-            trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-            },
-            modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth()
-        )
-
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            projectList.forEach { project ->
-                DropdownMenuItem(
-                    text = { Text(project) },
-                    onClick = {
-                        onProjectSelected(project)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun TableCell(
-    text: String,
-    fontWeight: FontWeight = FontWeight.Normal,
-    modifier: Modifier = Modifier.width(140.dp)
-) {
-    Box(
-        modifier = modifier.padding(8.dp)
-    ) {
-        Text(text = text, fontSize = 14.sp, fontWeight = fontWeight)
-    }
-}
-
-@Composable
-fun TableCell(
-    modifier: Modifier = Modifier.width(140.dp),
-    content: @Composable () -> Unit
-) {
-    Box(
-        modifier = modifier.padding(8.dp)
-    ) {
-        content()
-    }
-}
-
-@Composable
-fun ActionButton(text: String, color: Color, onClick: () -> Unit = {}) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = color),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier
-            .padding(end = 4.dp)
-            .height(32.dp)
-    ) {
-        Text(text, fontSize = 12.sp, color = Color.White)
-    }
-}
 
 @Composable
 fun DeleteConfirmationDialog(
@@ -709,13 +583,13 @@ fun DeleteConfirmationDialog(
             ) {
                 Text(
                     text = "Apakah Ingin menghapus ?",
-                    color = Color(0xFFD87AB2), // pink lembut
+                    color = Color(0xFFD87AB2),
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = entry.projectName,
+                    text = entry.projectName.orEmpty(),
                     color = Color.Gray,
                     fontWeight = FontWeight.Medium
                 )
@@ -744,7 +618,7 @@ fun DeleteConfirmationDialog(
                 }
             }
         },
-        confirmButton = {}, // tidak dipakai karena sudah ditangani di 'text'
+        confirmButton = {},
         dismissButton = {}
     )
 }

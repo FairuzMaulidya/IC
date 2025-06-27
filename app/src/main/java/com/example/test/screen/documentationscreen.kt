@@ -202,7 +202,7 @@ fun ProjectDetailContent(
 
         // --- Data Entry Details ---
         Spacer(modifier = Modifier.height(16.dp))
-        Text("--- Data Entry Details ---", style = MaterialTheme.typography.titleMedium)
+        Text("--- Problem Framing Details ---", style = MaterialTheme.typography.titleMedium)
         dataEntry?.let { entry ->
             Text("Problem Description: ${entry.problemDescription}", style = MaterialTheme.typography.bodySmall)
             Text("Target: ${entry.target}", style = MaterialTheme.typography.bodySmall)
@@ -219,13 +219,13 @@ fun ProjectDetailContent(
         Spacer(modifier = Modifier.height(16.dp))
         Text("--- Data Processing Details ---", style = MaterialTheme.typography.titleMedium)
         dataProcessing?.let { processing ->
-            Text("Source Data: ${processing.sourceData}", style = MaterialTheme.typography.bodySmall)
-            Text("Transformation Steps: ${processing.transformationSteps}", style = MaterialTheme.typography.bodySmall)
-            Text("Feature Engineering: ${processing.featureEngineering}", style = MaterialTheme.typography.bodySmall)
-            Text("Processed File Location: ${processing.processedFileLocation}", style = MaterialTheme.typography.bodySmall)
-            Text("Processed File Name: ${processing.processedFileName}", style = MaterialTheme.typography.bodySmall)
-            Text("Processing Status: ${processing.processingStatus}", style = MaterialTheme.typography.bodySmall)
-            Text("Created At: ${processing.createdAt}", style = MaterialTheme.typography.bodySmall)
+            Text("Source Data: ${processing.dataSourceDescription ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+            Text("Transformation Steps: ${processing.processingStepsSummary ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+            Text("Feature Engineering: ${processing.featureEngineeringDetails ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+            Text("Processed File Location: ${processing.processedDataLocation ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+            Text("Processed File: ${processing.processedFile ?: "N/A"}", style = MaterialTheme.typography.bodySmall) // Ini sekarang adalah URL/nama file yang diproses
+            Text("Processing Status: ${processing.processingStatus ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
+            Text("Created At: ${processing.createdAt ?: "N/A"}", style = MaterialTheme.typography.bodySmall)
         } ?: Text("Data Processing: Not available", style = MaterialTheme.typography.bodySmall)
 
 
